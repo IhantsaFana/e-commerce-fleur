@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext";
 import { useAuth } from "../context/AuthContext";
 import PhotoSlot from "../components/PhotoSlot";
-import CheckoutSteps from "../components/CheckoutSteps";
+import CheckoutSteps from "@/components/CheckoutSteps";
 
 const SIDE_IMG =
   "https://images.pexels.com/photos/5894056/pexels-photo-5894056.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=940";
