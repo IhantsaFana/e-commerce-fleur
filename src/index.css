@@ -1,0 +1,49 @@
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Inter:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-ink: #1c1b18;
+  --color-ink-soft: #5b5a52;
+  --color-coral: #e2596e;
+  --color-coral-dark: #c94459;
+  --color-sage: #6f9275;
+  --color-sage-dark: #57795d;
+  --color-mint: #e9f1e8;
+  --color-gold: #d4a53c;
+  --color-graybg: #f5f4ef;
+  --color-cream: #faf7f0;
+  --color-line: #e6e2d8;
+  --color-dark-bg: #131210;
+  --color-dark-surface: #1e1c19;
+  --color-dark-line: #37342e;
+  --font-display: "Playfair Display", Georgia, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --animate-fade-up: fade-up 0.6s ease-out both;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply font-sans text-ink bg-cream dark:bg-dark-bg dark:text-white transition-colors duration-300;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
