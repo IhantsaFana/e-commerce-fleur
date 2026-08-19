@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLanguage } from "../context/LanguageContext";
-import { products } from "../data/products";
-import ProductCard from "../components/ProductCard";
+import { products } from "@/data/products";
+import ProductCard from "@/components/ProductCard";
 
 const HERO_IMG =
   "https://images.pexels.com/photos/5894049/pexels-photo-5894049.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200";
