@@ -1,14 +1,39 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useLanguage } from "../context/LanguageContext";
 import { products } from "@/data/products";
 import ProductCard from "@/components/ProductCard";
 
-const HERO_IMG =
-  "https://images.pexels.com/photos/5894049/pexels-photo-5894049.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200";
+const SLIDE_IMAGES = [
+  "https://images.pexels.com/photos/5894049/pexels-photo-5894049.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=800&w=1600",
+  "https://images.pexels.com/photos/931177/pexels-photo-931177.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=800&w=1600",
+  "https://images.pexels.com/photos/140831/pexels-photo-140831.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=800&w=1600",
+  "https://images.pexels.com/photos/1488315/pexels-photo-1488315.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=800&w=1600",
+];
+
+const AUTOPLAY_MS = 5000;
 
 export default function Home() {
   const { t } = useLanguage();
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [current, setCurrent] = useState(0);
+
+  // Les diapositives viennent des traductions (t.hero.slides)
+  const slides = t.hero.slides;
+
+  const goTo = useCallback(
+    (i: number) => setCurrent((i + slides.length) % slides.length),
+    [slides.length]
+  );
+  const next = useCallback(() => goTo(current + 1), [current, goTo]);
+  const prev = useCallback(() => goTo(current - 1), [current, goTo]);
+
+  // Défilement automatique (relancé à chaque changement, manuel ou auto)
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setCurrent((c) => (c + 1) % slides.length);
+    }, AUTOPLAY_MS);
+    return () => clearTimeout(id);
+  }, [current, slides.length]);
 
   const filtered = useMemo(() => {
     if (!activeFilter) return products;
@@ -17,30 +42,78 @@ export default function Home() {
 
   return (
     <div className="animate-fade-up">
-      {/* HERO */}
-      <section
-        className="relative h-[520px] overflow-hidden"
-        style={{
-          backgroundImage: `url(${HERO_IMG})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundAttachment: "fixed",
-        }}
-      >
+      {/* HERO — CARROUSEL */}
+      <section className="relative h-[520px] overflow-hidden">
+        {/* Images en fondu enchaîné */}
+        {slides.map((_, i) => (
+          <div
+            key={i}
+            className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
+              i === current ? "opacity-100" : "opacity-0"
+            }`}
+            style={{
+              backgroundImage: `url(${SLIDE_IMAGES[i]})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }}
+          />
+        ))}
+
+        {/* Voile dégradé */}
         <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/40 to-transparent dark:from-dark-bg/90 dark:via-dark-bg/40" />
-        <div className="relative max-w-[1400px] mx-auto h-full flex flex-col justify-center px-6">
-          <h1 className="font-display text-4xl md:text-5xl text-ink dark:text-white max-w-md leading-tight">
-            {t.hero.title1}
-          </h1>
-          <p className="font-display text-2xl md:text-3xl font-bold text-ink dark:text-white mt-2">
-            {t.hero.title2}
-          </p>
-          <a
-            href="#products"
-            className="mt-6 inline-block w-fit bg-sage hover:bg-sage-dark text-white text-sm font-semibold tracking-wide px-8 py-3 rounded-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
-          >
-            {t.hero.cta}
-          </a>
+
+        {/* Contenu (réanimé à chaque slide) */}
+        <div className="relative max-w-[1400px] mx-auto h-full flex flex-col justify-center px-16 md:px-24">
+          <div key={current} className="animate-fade-up">
+            <h1 className="font-display text-4xl md:text-5xl text-ink dark:text-white max-w-md leading-tight">
+              {slides[current].title}
+            </h1>
+            <p className="font-display text-2xl md:text-3xl font-bold text-ink dark:text-white mt-2">
+              {slides[current].text}
+            </p>
+            <a
+              href="#products"
+              className="mt-6 inline-block w-fit bg-sage hover:bg-sage-dark text-white text-sm font-semibold tracking-wide px-8 py-3 rounded-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
+            >
+              {t.hero.cta}
+            </a>
+          </div>
+        </div>
+
+        {/* Flèche gauche */}
+        <button
+          onClick={prev}
+          aria-label="Précédent"
+          className="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center bg-white/70 dark:bg-dark-surface/70 text-ink dark:text-white backdrop-blur border border-line dark:border-dark-line hover:bg-coral hover:text-white hover:border-coral transition-all duration-200"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+
+        {/* Flèche droite */}
+        <button
+          onClick={next}
+          aria-label="Suivant"
+          className="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center bg-white/70 dark:bg-dark-surface/70 text-ink dark:text-white backdrop-blur border border-line dark:border-dark-line hover:bg-coral hover:text-white hover:border-coral transition-all duration-200"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+
+        {/* Points de navigation */}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2">
+          {slides.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrent(i)}
+              aria-label={`Slide ${i + 1}`}
+              className={`h-2 rounded-full transition-all duration-300 ${
+                i === current ? "w-8 bg-coral" : "w-2 bg-white/60 dark:bg-gray-400 hover:bg-coral"
+              }`}
+            />
+          ))}
         </div>
       </section>
 

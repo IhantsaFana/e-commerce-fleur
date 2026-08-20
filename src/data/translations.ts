@@ -11,6 +11,12 @@ export const translations = {
       title1: "Célébrez les anniversaires d'été",
       title2: "Envoyez des cadeaux partout dans le monde",
       cta: "Découvrir nos produits",
+      slides: [
+        { title: "Célébrez les anniversaires d'été", text: "Envoyez des cadeaux partout dans le monde" },
+        { title: "Des fleurs fraîches, livrées avec amour", text: "Garanties 7 jours de fraîcheur" },
+        { title: "Le cadeau parfait pour chaque occasion", text: "Bouquets, plantes et coffrets gourmands" },
+        { title: "Commandez en quelques clics", text: "Paiement sécurisé et facture instantanée" },
+      ],
     },
     home: {
       productsTitle: "Tous nos produits",
@@ -152,6 +158,12 @@ export const translations = {
       title1: "Celebrate summer birthdays",
       title2: "Send gifts anywhere in the world",
       cta: "Discover our products",
+      slides: [
+        { title: "Celebrate summer birthdays", text: "Send gifts anywhere in the world" },
+        { title: "Fresh flowers, delivered with love", text: "Guaranteed fresh for 7 days" },
+        { title: "The perfect gift for every occasion", text: "Bouquets, plants and gourmet boxes" },
+        { title: "Order in just a few clicks", text: "Secure payment and instant invoice" },
+      ],
     },
     home: {
       productsTitle: "All our products",
@@ -293,6 +305,12 @@ export const translations = {
       title1: "Ankalazao ny fitsingerenan'ny taona amin'ny fahavaratra",
       title2: "Alefaso fanomezana eran'izao tontolo izao",
       cta: "Jereo ny vokatra",
+      slides: [
+        { title: "Ankalazao ny fitsingerenan'ny taona amin'ny fahavaratra", text: "Alefaso fanomezana eran'izao tontolo izao" },
+        { title: "Voninkazo vaovao, alefa amim-pitiavana", text: "Antoka 7 andro ny fahavaozana" },
+        { title: "Fanomezana tsara indrindra ho an'ny fotoana rehetra", text: "Fehezam-boninkazo, zavamaniry ary harona gourmet" },
+        { title: "Manafatra tsotra fotsiny", text: "Fandoavam-bola azo antoka sy faktiora eo no ho eo" },
+      ],
     },
     home: {
       productsTitle: "Ny vokatra rehetra",
