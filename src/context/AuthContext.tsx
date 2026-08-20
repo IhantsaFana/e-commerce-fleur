@@ -1,7 +1,8 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import * as authApi from "../services/authApi";
 
 export interface User {
-  id?: number;
+  id: number;
   nom: string;
   prenom: string;
   email: string;
@@ -12,40 +13,88 @@ export interface User {
 
 interface AuthContextValue {
   user: User | null;
-  login: (email: string, password: string) => boolean;
-  register: (data: { nom: string; prenom: string; email: string; motDePasse: string; telephone: string }) => boolean;
+  token: string | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (data: { nom: string; prenom: string; email: string; motDePasse: string; telephone: string }) => Promise<void>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const TOKEN_KEY = "fq_token";
+
+const mapUser = (u: authApi.UserResponse): User => ({
+  id: u.id,
+  nom: u.nom,
+  prenom: u.prenom,
+  email: u.email,
+  telephone: u.telephone || "",
+  role: u.role,
+  dateCreation: u.created_at || "",
+});
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem("fq_user");
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState<boolean>(!!localStorage.getItem(TOKEN_KEY));
+
+  const refreshUser = useCallback(async (accessToken: string) => {
+    try {
+      const me = await authApi.fetchCurrentUser(accessToken);
+      setUser(mapUser(me));
+    } catch {
+      localStorage.removeItem(TOKEN_KEY);
+      setToken(null);
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (user) localStorage.setItem("fq_user", JSON.stringify(user));
-    else localStorage.removeItem("fq_user");
-  }, [user]);
+    if (token) {
+      refreshUser(token);
+    } else {
+      setLoading(false);
+      setUser(null);
+    }
+  }, [token, refreshUser]);
 
-  const login = (email: string, password: string) => {
-    // En production, cela vérifierait avec le backend
-    setUser({ email, nom: "", prenom: "", telephone: "", role: "client", dateCreation: new Date().toISOString() });
-    void password;
-    return true;
+  const login = async (email: string, password: string) => {
+    const { access_token } = await authApi.login(email, password);
+    localStorage.setItem(TOKEN_KEY, access_token);
+    setToken(access_token);
+    const me = await authApi.fetchCurrentUser(access_token);
+    setUser(mapUser(me));
   };
 
-  const register = ({ nom, prenom, email, telephone }: { nom: string; prenom: string; email: string; motDePasse: string; telephone: string }) => {
-    setUser({ id: Date.now(), nom, prenom, email, telephone, role: "client", dateCreation: new Date().toISOString() });
-    return true;
+  const register = async (data: {
+    nom: string;
+    prenom: string;
+    email: string;
+    motDePasse: string;
+    telephone: string;
+  }) => {
+  
+    await authApi.register({
+      nom: data.nom,
+      prenom: data.prenom,
+      email: data.email,
+      password: data.motDePasse,
+      telephone: data.telephone,
+    });
   };
 
-  const logout = () => setUser(null);
+  const logout = () => {
+    localStorage.removeItem(TOKEN_KEY);
+    setToken(null);
+    setUser(null);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 

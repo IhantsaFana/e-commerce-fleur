@@ -1,21 +1,23 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext";
 import { useAuth } from "../context/AuthContext";
-import PhotoSlot from "../components/PhotoSlot";
-import CheckoutSteps from "@/components/CheckoutSteps";
+import { useToast } from "../context/ToastContext";
+import CheckoutSteps from "../components/CheckoutSteps";
 
 const SIDE_IMG =
   "https://images.pexels.com/photos/5894056/pexels-photo-5894056.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=940";
 
 export default function Auth() {
   const { t } = useLanguage();
-  const { login, register } = useAuth();
+  const { login, register, loading } = useAuth();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const redirectTo = location.state?.from || "/";
 
   const [mode, setMode] = useState<"login" | "register">("login");
+
   const [form, setForm] = useState({
     nom: "",
     prenom: "",
@@ -24,7 +26,14 @@ export default function Auth() {
     confirm: "",
     telephone: "",
   });
+
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    // Si déjà connecté, on retourne directement vers la destination.
+    if (loading) return;
+  }, [loading]);
 
   const update = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
@@ -32,37 +41,49 @@ export default function Auth() {
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
   const phoneValid = form.telephone.length === 0 || /^[\d\s\-\+\(\)]{10,}$/.test(form.telephone);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-
-    if (mode === "login") {
-      if (!emailValid || form.motDePasse.length < 4) {
-        setError(t.auth.error);
-        return;
+    setSubmitting(true);
+    try {
+      if (mode === "login") {
+        if (!emailValid || form.motDePasse.length < 4) {
+          setError(t.auth.error);
+          return;
+        }
+        await login(form.email, form.motDePasse);
+        showToast(t.auth.loginSuccess, "success");
+        navigate(redirectTo, { replace: true });
+      } else {
+        if (
+          !form.nom.trim() ||
+          !form.prenom.trim() ||
+          !form.email.trim() ||
+          !emailValid ||
+          form.motDePasse.length < 4 ||
+          form.motDePasse !== form.confirm ||
+          !phoneValid
+        ) {
+          setError(t.auth.error);
+          return;
+        }
+        await register({
+          nom: form.nom.trim(),
+          prenom: form.prenom.trim(),
+          email: form.email.trim(),
+          motDePasse: form.motDePasse,
+          telephone: form.telephone.trim(),
+        });
+        
+        showToast(t.auth.accountCreated, "success");
+        setMode("login");
+        setForm((f) => ({ ...f, motDePasse: "", confirm: "" }));
       }
-      login(form.email, form.motDePasse);
-      navigate(redirectTo, { replace: true });
-    } else {
-      if (
-        !form.nom.trim() ||
-        !form.prenom.trim() ||
-        !emailValid ||
-        form.motDePasse.length < 4 ||
-        form.motDePasse !== form.confirm ||
-        !phoneValid
-      ) {
-        setError(t.auth.error);
-        return;
-      }
-      register({
-        nom: form.nom,
-        prenom: form.prenom,
-        email: form.email,
-        motDePasse: form.motDePasse,
-        telephone: form.telephone,
-      });
-      navigate(redirectTo, { replace: true });
+    } catch (err: any) {
+      // Message d'erreur renvoyé par le backend (app/routes/auth.py)
+      setError(err?.message || t.auth.error);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -73,7 +94,7 @@ export default function Auth() {
     <div className="min-h-[calc(100vh-61px)] grid md:grid-cols-2">
       {/* Image */}
       <div className="relative hidden md:block overflow-hidden h-screen sticky top-0">
-        <PhotoSlot src={SIDE_IMG} alt="auth-side" className="absolute inset-0 w-full h-full object-cover" />
+        <img src={SIDE_IMG} alt="auth" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-ink/40 flex items-center justify-center p-10 pb-28 z-10">
           <p className="font-display text-3xl text-white max-w-sm text-center drop-shadow-md leading-relaxed">
             {t.auth.side}
@@ -85,14 +106,12 @@ export default function Auth() {
       <div className="flex items-center justify-center px-6 py-12 bg-cream dark:bg-dark-bg transition-colors duration-300">
         <div className="w-full max-w-sm animate-fade-up">
           <CheckoutSteps current={2} />
-
           <Link
             to="/"
             className="text-xs text-ink-soft dark:text-gray-400 hover:text-coral transition-colors duration-200 mb-6 inline-flex items-center gap-1"
           >
             ← {t.auth.backHome}
           </Link>
-
           <h1 className="font-display text-3xl text-ink dark:text-white mb-1">{t.auth.welcome}</h1>
           <p className="text-sm text-ink-soft dark:text-gray-400 mb-6">{t.auth.subtitle}</p>
 
@@ -136,6 +155,7 @@ export default function Auth() {
                 </div>
               </>
             )}
+
             <div>
               <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">{t.auth.email}</label>
               <input value={form.email} onChange={update("email")} type="email" placeholder="vous@exemple.com" className={inputClass} />
@@ -155,9 +175,10 @@ export default function Auth() {
 
             <button
               type="submit"
-              className="w-full bg-sage hover:bg-sage-dark text-white text-sm font-semibold py-3 rounded-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
+              disabled={submitting}
+              className="w-full bg-sage hover:bg-sage-dark text-white text-sm font-semibold py-3 rounded-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-60"
             >
-              {mode === "login" ? t.auth.loginBtn : t.auth.registerBtn}
+              {submitting ? "…" : mode === "login" ? t.auth.loginBtn : t.auth.registerBtn}
             </button>
           </form>
 

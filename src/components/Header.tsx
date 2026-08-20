@@ -16,7 +16,7 @@ export default function Header() {
         <Link to="/" className="flex items-center gap-1 group">
           <span className="font-display text-2xl text-ink dark:text-white tracking-tight">Voninkazo'</span>
           <span className="font-display text-2xl text-coral relative">
-            Na
+            Nao
             <svg className="absolute -top-3 left-1/2 -translate-x-1/2 w-4 h-4 text-coral" viewBox="0 0 24 24" fill="currentColor">
               <path d="M2 18h20l-1.5-9-5 4-3.5-7-3.5 7-5-4L2 18z" />
             </svg>
@@ -53,13 +53,14 @@ export default function Header() {
               </span>
             )}
           </Link>
+
           {user ? (
             <button
               onClick={logout}
               className="w-8 h-8 rounded-full border border-line dark:border-dark-line flex items-center justify-center text-xs font-semibold text-ink dark:text-gray-100 hover:border-coral hover:text-coral transition-colors duration-200"
-              title={user.email}
+              title={user.nom}
             >
-              {user.email?.[0]?.toUpperCase() || "U"}
+              {(user.nom?.[0] || user.prenom?.[0] || "U").toUpperCase()}
             </button>
           ) : (
             <Link

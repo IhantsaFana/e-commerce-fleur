@@ -69,6 +69,8 @@ export const translations = {
       switchToLogin: "Déjà un compte ? Connectez-vous",
       backHome: "Retour à l'accueil",
       side: "Choisissez vos fleurs préférées et inscrivez-vous",
+      accountCreated: "Compte créé avec succès",
+      loginSuccess: "Connexion réussie",
     },
     payment: {
       title: "Paiement",
@@ -208,6 +210,8 @@ export const translations = {
       switchToLogin: "Already have an account? Sign in",
       backHome: "Back to home",
       side: "Pick your favorite flowers and sign up",
+      accountCreated: "Account created successfully",
+      loginSuccess: "Login successful",
     },
     payment: {
       title: "Payment",
@@ -347,6 +351,8 @@ export const translations = {
       switchToLogin: "Efa manana kaonty? Midira",
       backHome: "Hiverina amin'ny fandraisana",
       side: "Mifidiana ny voninkazo tianao ary misoratra anarana",
+      accountCreated: "Kaonty noforonina soa aman-tsara",
+      loginSuccess: "Fidirana nahomby",
     },
     payment: {
       title: "Fandoavam-bola",

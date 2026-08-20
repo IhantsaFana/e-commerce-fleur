@@ -7,7 +7,7 @@ export default function Footer() {
       <div className="max-w-[1400px] mx-auto px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="text-center md:text-left">
           <div className="font-display text-xl text-white">
-            Flora<span className="text-coral">Queen</span>
+            Voninkazo'<span className="text-coral">Nao</span>
           </div>
           <p className="text-xs text-gray-500 mt-1">{t.footer.tagline}</p>
         </div>
