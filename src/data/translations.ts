@@ -86,6 +86,14 @@ export const translations = {
       side: "Choisissez vos fleurs préférées et inscrivez-vous",
       accountCreated: "Compte créé avec succès",
       loginSuccess: "Connexion réussie",
+      showPassword: "Afficher le mot de passe",
+      hidePassword: "Masquer le mot de passe",
+      passwordStrength: {
+        weak: "Mot de passe faible",
+        medium: "Mot de passe moyen",
+        strong: "Mot de passe fort",
+        hint: "Utilisez 8+ caractères avec majuscules, chiffres et symboles",
+      },
     },
     payment: {
       title: "Paiement",
@@ -398,6 +406,14 @@ export const translations = {
       side: "Mifidiana ny voninkazo tianao ary misoratra anarana",
       accountCreated: "Kaonty noforonina soa aman-tsara",
       loginSuccess: "Fidirana nahomby",
+      showPassword: "Asehoy ny tenimiafina",
+      hidePassword: "Afeno ny tenimiafina",
+      passwordStrength: {
+        weak: "Tenimiafina malemy",
+        medium: "Tenimiafina antonony",
+        strong: "Tenimiafina matanjaka",
+        hint: "Ampiasao 8+ tarehintsoratra miaraka amin'ny lehibe, isa ary marika",
+      },
     },
     payment: {
       title: "Fandoavam-bola",
@@ -447,7 +463,6 @@ export const translations = {
       delivery: "Fandefasana",
       grandTotal: "Total feno",
       paymentMethod: "Fomba fandoavam-bola",
-      print: "Printy ny faktiora",
       backToShop: "Hiverina amin'ny fivarotana",
       paid: "VOALOA",
       deliveryDate: "Daty fandefasana",
