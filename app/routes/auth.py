@@ -24,9 +24,7 @@ def get_db():
 @router.post("/register", response_model=UserResponse)
 def register(user: UserCreate, db: Session = Depends(get_db)):
 
-    existing_user = db.query(User).filter(
-        (User.username == user.username) | (User.email == user.email)
-    ).first() # Verifie s'il existe déjà un utilisateur avec le même nom d'utilisateur ou email
+    existing_user = db.query(User).filter( (User.email == user.email)).first() # Verifie s'il existe déjà un utilisateur avec le même email
 
     if existing_user:
         raise HTTPException(
@@ -37,7 +35,8 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     hashed_password = hash_password(user.password)
 
     new_user = User(
-        username=user.username,
+        lastname=user.lastname,
+        firstname=user.firstname,
         email=user.email,
         hashed_password=hashed_password,
         telephone=user.telephone,
