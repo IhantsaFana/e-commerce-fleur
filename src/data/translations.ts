@@ -22,6 +22,14 @@ export const translations = {
       productsTitle: "Tous nos produits",
       productsSubtitle: "Commandez, payez et recevez votre facture en quelques clics",
       all: "Tous",
+      howTitle: "Comment ça marche",
+      howSubtitle: "Commandez, payez et recevez votre facture en quelques étapes simples.",
+      howSteps: [
+        { title: "Choisissez vos fleurs", text: "Parcourez notre collection et ajoutez vos coups de cœur au panier." },
+        { title: "Connectez-vous", text: "Créez votre compte ou connectez-vous pour confirmer votre commande." },
+        { title: "Payez en toute sécurité", text: "Réglez par carte, mobile money ou PayPal en quelques secondes." },
+        { title: "Recevez votre facture", text: "Votre facture détaillée est générée instantanément après le paiement." },
+      ],
     },
     products: {
       filters: ["Fleurs", "Plantes", "LEGO Gifts", "Collection été", "Paniers cadeaux", "Cadeaux perso"],
@@ -31,6 +39,7 @@ export const translations = {
       reviews: "avis",
       new: "NOUVEAU",
       details: "Voir les détails",
+      addToCart: "Ajouter au panier",
     },
     detail: {
       back: "Retour aux produits",
@@ -169,6 +178,14 @@ export const translations = {
       productsTitle: "All our products",
       productsSubtitle: "Order, pay and get your invoice in just a few clicks",
       all: "All",
+      howTitle: "How it works",
+      howSubtitle: "Order, pay and get your invoice in a few simple steps.",
+      howSteps: [
+        { title: "Pick your flowers", text: "Browse our collection and add your favorites to the cart." },
+        { title: "Sign in", text: "Create your account or sign in to confirm your order." },
+        { title: "Pay securely", text: "Pay by card, mobile money or PayPal in seconds." },
+        { title: "Get your invoice", text: "Your detailed invoice is generated instantly after payment." },
+      ],
     },
     products: {
       filters: ["Flowers", "Plants", "LEGO Gifts", "Summer collection", "Gift baskets", "Personalized gifts"],
@@ -178,6 +195,7 @@ export const translations = {
       reviews: "reviews",
       new: "NEW",
       details: "View details",
+      addToCart: "Add to cart",
     },
     detail: {
       back: "Back to products",
@@ -316,6 +334,14 @@ export const translations = {
       productsTitle: "Ny vokatra rehetra",
       productsSubtitle: "Manafatra, mandoa ary mahazo faktiora tsotra fotsiny",
       all: "Rehetra",
+      howTitle: "Ahoana ny fomba fiasa",
+      howSubtitle: "Manafatra, mandoa ary mahazo faktiora amin'ny dingana tsotra vitsivitsy.",
+      howSteps: [
+        { title: "Mifidiana voninkazo", text: "Jereo ny fanangonanay ary ampio ny tianao ao anaty harona." },
+        { title: "Midira", text: "Mamorona kaonty na midira hanamarina ny fividiananao." },
+        { title: "Mandoa azo antoka", text: "Mandoa amin'ny karatra, mobile money na PayPal." },
+        { title: "Mahazoa faktiora", text: "Vokarina eo no ho eo ny faktioranao amin'ny antsipiriany." },
+      ],
     },
     products: {
       filters: ["Voninkazo", "Zavamaniry", "LEGO Gifts", "Fahavaratra", "Harona fanomezana", "Fanomezana manokana"],
@@ -325,6 +351,7 @@ export const translations = {
       reviews: "hevitra",
       new: "VAOVAO",
       details: "Jereo ny antsipiriany",
+      addToCart: "Ampio ao anaty harona",
     },
     detail: {
       back: "Hiverina amin'ny vokatra",
