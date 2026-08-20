@@ -1,19 +1,19 @@
 import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from "react";
+import { Fleur } from "../data/products";
 
 export interface CartItem {
-  id: string;
+  id: number;      // = fleur.id
   name: string;
   price: number;
   image: string;
-  category: string;
   qty: number;
 }
 
 interface CartContextValue {
   items: CartItem[];
-  addItem: (product: { id: string; name: string; price: number; image: string; category: string }, qty?: number) => void;
-  removeItem: (id: string) => void;
-  updateQty: (id: string, qty: number) => void;
+  addItem: (fleur: Fleur, qty?: number) => void;
+  removeItem: (id: number) => void;
+  updateQty: (id: number, qty: number) => void;
   clearCart: () => void;
   total: number;
   count: number;
@@ -31,19 +31,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("fq_cart", JSON.stringify(items));
   }, [items]);
 
-  const addItem = (product: { id: string; name: string; price: number; image: string; category: string }, qty = 1) => {
+  const addItem = (fleur: Fleur, qty = 1) => {
     setItems((prev) => {
-      const existing = prev.find((i) => i.id === product.id);
+      const existing = prev.find((i) => i.id === fleur.id);
       if (existing) {
-        return prev.map((i) => (i.id === product.id ? { ...i, qty: i.qty + qty } : i));
+        return prev.map((i) => (i.id === fleur.id ? { ...i, qty: i.qty + qty } : i));
       }
-      return [...prev, { ...product, qty }];
+      return [
+        ...prev,
+        { id: fleur.id, name: fleur.nom, price: fleur.prix, image: fleur.imageUrl, qty },
+      ];
     });
   };
 
-  const removeItem = (id: string) => setItems((prev) => prev.filter((i) => i.id !== id));
+  const removeItem = (id: number) => setItems((prev) => prev.filter((i) => i.id !== id));
 
-  const updateQty = (id: string, qty: number) =>
+  const updateQty = (id: number, qty: number) =>
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, qty: Math.max(1, qty) } : i)));
 
   const clearCart = () => setItems([]);
