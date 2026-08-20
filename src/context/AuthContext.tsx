@@ -23,14 +23,15 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const TOKEN_KEY = "fq_token";
 
+// Le backend de l'ami renvoie "lastname"/"firstname" → on mappe vers nom/prenom
 const mapUser = (u: authApi.UserResponse): User => ({
   id: u.id,
-  nom: u.nom,
-  prenom: u.prenom,
+  nom: u.lastname,
+  prenom: u.firstname,
   email: u.email,
   telephone: u.telephone || "",
   role: u.role,
-  dateCreation: u.created_at || "",
+  dateCreation: "",
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -77,9 +78,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     motDePasse: string;
     telephone: string;
   }) => {
+    // Envoie les champs attendus par le backend de l'ami
     await authApi.register({
-      nom: data.nom,
-      prenom: data.prenom,
+      lastname: data.nom,
+      firstname: data.prenom,
       email: data.email,
       password: data.motDePasse,
       telephone: data.telephone,

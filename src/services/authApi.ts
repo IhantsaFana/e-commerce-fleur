@@ -1,8 +1,8 @@
 import { API_BASE_URL } from "../config/env";
 
 export interface RegisterPayload {
-  nom: string;
-  prenom: string;
+  lastname: string;
+  firstname: string;
   email: string;
   password: string;
   telephone: string;
@@ -10,8 +10,8 @@ export interface RegisterPayload {
 
 export interface RegisterResponse {
   id: number;
-  nom: string;
-  prenom: string;
+  lastname: string;
+  firstname: string;
   email: string;
   telephone: string | null;
   role: string;
@@ -24,12 +24,11 @@ export interface TokenResponse {
 
 export interface UserResponse {
   id: number;
-  nom: string;
-  prenom: string;
+  lastname: string;
+  firstname: string;
   email: string;
   telephone: string | null;
   role: string;
-  created_at: string | null;
 }
 
 const handle = async <T>(res: Response): Promise<T> => {

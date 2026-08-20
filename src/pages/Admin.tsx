@@ -41,7 +41,7 @@ export default function Admin() {
   const [form, setForm] = useState<Fleur>(emptyFleur());
 
   // ---- Accès réservé à l'admin ----
-  if (user?.role !== "admin") {
+  if (user?.role !== "Admin") {
     return (
       <div className="max-w-[600px] mx-auto px-6 py-24 text-center animate-fade-up">
         <div className="text-5xl mb-4">🔒</div>

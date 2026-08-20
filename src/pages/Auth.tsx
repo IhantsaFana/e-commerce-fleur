@@ -28,6 +28,23 @@ const STRENGTH_STYLES: Record<StrengthLevel, { bar: string; label: string }> = {
   2: { bar: "bg-sage", label: "text-sage" },
 };
 
+// Préfixes valides des opérateurs malgaches : Telma (032/034), Airtel (033), Orange (037/038)
+const PHONE_PREFIXES = ["032", "033", "034", "037", "038"];
+
+function isPhoneValid(raw: string): boolean {
+  if (!raw.trim()) return true; // champ optionnel : vide = ok
+  const digits = raw.replace(/[\s\-]/g, "");
+  if (digits.length !== 10) return false;
+  return PHONE_PREFIXES.some((p) => digits.startsWith(p));
+}
+
+// Validation stricte du format d'email
+function isValidEmailStrict(email: string): boolean {
+  const cleanEmail = email.trim();
+  const strictRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  return strictRegex.test(cleanEmail);
+}
+
 export default function Auth() {
   const { t } = useLanguage();
   const { login, register, loading } = useAuth();
@@ -60,8 +77,8 @@ export default function Auth() {
   const update = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
 
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
-  const phoneValid = form.telephone.length === 0 || /^[\d\s\-\+\(\)]{10,}$/.test(form.telephone);
+  const emailValid = isValidEmailStrict(form.email);
+  const phoneValid = isPhoneValid(form.telephone);
 
   const strength = useMemo(() => getStrength(form.motDePasse), [form.motDePasse]);
 
@@ -69,45 +86,85 @@ export default function Auth() {
     e.preventDefault();
     setError("");
     setSubmitting(true);
+
+    const cleanEmail = form.email.trim().toLowerCase();
+
     try {
       if (mode === "login") {
-        if (!emailValid || form.motDePasse.length < 4) {
+        if (!emailValid) {
+          setError("Mail mal ecrit");
+          return;
+        }
+        if (form.motDePasse.length < 4) {
           setError(t.auth.error);
           return;
         }
-        const loggedUser = await login(form.email, form.motDePasse);
+        const loggedUser = await login(cleanEmail, form.motDePasse);
         showToast(t.auth.loginSuccess, "success");
         // Redirection selon le rôle
-        if (loggedUser.role === "admin") {
+        if (loggedUser.role === "Admin") {
           navigate("/admin", { replace: true });
         } else {
           navigate("/payment", { replace: true });
         }
       } else {
-        if (
-          !form.nom.trim() ||
-          !form.prenom.trim() ||
-          !form.email.trim() ||
-          !emailValid ||
-          form.motDePasse.length < 4 ||
-          form.motDePasse !== form.confirm ||
-          !phoneValid
-        ) {
+        if (!form.nom.trim() || !form.prenom.trim() || !cleanEmail) {
           setError(t.auth.error);
           return;
         }
-        await register({
-          nom: form.nom.trim(),
-          prenom: form.prenom.trim(),
-          email: form.email.trim(),
-          motDePasse: form.motDePasse,
-          telephone: form.telephone.trim(),
-        });
-        showToast(t.auth.accountCreated, "success");
-        setMode("login");
-        setForm((f) => ({ ...f, motDePasse: "", confirm: "" }));
-        setShowPwd(false);
-        setShowConfirm(false);
+        if (!emailValid) {
+          setError("Mail mal ecrit");
+          return;
+        }
+        if (!phoneValid) {
+          setError("Numero mal ecrit");
+          return;
+        }
+        if (form.motDePasse !== form.confirm) {
+          setError("mot de pass de correspond pas");
+          return;
+        }
+        if (form.motDePasse.length < 4) {
+          setError(t.auth.error);
+          return;
+        }
+
+        try {
+          await register({
+            nom: form.nom.trim(),
+            prenom: form.prenom.trim(),
+            email: cleanEmail,
+            motDePasse: form.motDePasse,
+            telephone: form.telephone.trim(),
+          });
+          showToast(t.auth.accountCreated, "success");
+          setMode("login");
+          setForm((f) => ({ ...f, motDePasse: "", confirm: "" }));
+          setShowPwd(false);
+          setShowConfirm(false);
+        } catch (err: any) {
+          const rawMsg = err?.message || "";
+
+          if (rawMsg.toLowerCase().includes("failed to fetch")) {
+            setError("Erreur du serveur, vérifiez vos informations ou réessayez.");
+            return;
+          }
+
+          const msg = rawMsg.toLowerCase();
+          const nomDup = msg.includes("lastname") || msg.includes("nom");
+          const prenomDup =
+            msg.includes("firstname") || msg.includes("prenom") || msg.includes("prénom");
+
+          if (nomDup && prenomDup) {
+            setError("Nom et Prenom deja utiliser");
+          } else if (nomDup) {
+            setError("Nom deja utiliser");
+          } else if (prenomDup) {
+            setError("Prenom deja utiliser");
+          } else {
+            setError(rawMsg || t.auth.error);
+          }
+        }
       }
     } catch (err: any) {
       setError(err?.message || t.auth.error);
@@ -123,12 +180,12 @@ export default function Auth() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       {show ? (
         <>
-          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7z" strokeLinecap="round" strokeLinejoin="round" />
           <circle cx="12" cy="12" r="3" />
         </>
       ) : (
         <>
-          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7z" strokeLinecap="round" strokeLinejoin="round" />
           <circle cx="12" cy="12" r="3" />
           <path d="M3 3l18 18" strokeLinecap="round" />
         </>
@@ -291,7 +348,7 @@ export default function Auth() {
                   </button>
                 </div>
                 {form.confirm.length > 0 && form.confirm !== form.motDePasse && (
-                  <p className="text-[11px] text-red-500 mt-1.5">{t.auth.error}</p>
+                  <p className="text-[11px] text-red-500 mt-1.5">mot de pass de correspond pas</p>
                 )}
               </div>
             )}
