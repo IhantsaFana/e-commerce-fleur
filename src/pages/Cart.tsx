@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
+import { formatAr } from "../data/products";
 import PhotoSlot from "../components/PhotoSlot";
 import CheckoutSteps from "../components/CheckoutSteps";
 
@@ -53,7 +54,6 @@ export default function Cart() {
               <Link to={`/product/${item.id}`} className="font-semibold text-ink dark:text-white hover:text-coral transition-colors duration-200">
                 {item.name}
               </Link>
-              <p className="text-xs text-ink-soft dark:text-gray-400">{item.category}</p>
             </div>
             <div className="flex items-center gap-2">
               <label className="text-xs text-ink-soft dark:text-gray-400 hidden sm:inline">{t.cart.qty}</label>
@@ -65,8 +65,8 @@ export default function Cart() {
                 className="w-14 border border-line dark:border-dark-line bg-white dark:bg-dark-bg text-ink dark:text-white rounded-sm px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-coral/50"
               />
             </div>
-            <span className="font-semibold text-ink dark:text-white w-20 text-right">
-              €{(item.price * item.qty).toFixed(2)}
+            <span className="font-semibold text-ink dark:text-white w-28 text-right">
+              {formatAr(item.price * item.qty)}
             </span>
             <button
               onClick={() => removeItem(item.id)}
@@ -83,7 +83,7 @@ export default function Cart() {
         <h2 className="font-display text-lg text-ink dark:text-white mb-4">{t.cart.summary}</h2>
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm text-ink-soft dark:text-gray-400">{t.cart.total}</span>
-          <span className="font-bold text-xl text-ink dark:text-white">€{total.toFixed(2)}</span>
+          <span className="font-bold text-xl text-ink dark:text-white">{formatAr(total)}</span>
         </div>
         <p className="text-xs text-ink-soft dark:text-gray-500 mb-4">{t.cart.note}</p>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">

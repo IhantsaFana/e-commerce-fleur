@@ -1,3 +1,9 @@
+// ============================================================
+// Historique des commandes (stockage local, compatible diagramme UML)
+//   Commande (id, numeroCommande, dateCommande, total, statut)
+//   LigneCommande (quantite, prixUnitaire, sousTotal)
+// ============================================================
+
 export interface OrderItem {
   id: number;        // fleur.id
   name: string;

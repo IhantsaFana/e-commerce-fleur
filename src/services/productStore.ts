@@ -1,3 +1,7 @@
+// ============================================================
+// Store produits persistant (localStorage) — gestion admin
+// Compatible diagramme UML : Fleur, Categorie
+// ============================================================
 import {
   Fleur,
   Categorie,
