@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useLanguage } from "../context/LanguageContext";
-import { products } from "@/data/products";
+import { Fleur } from "@/data/products";
+import { getFleurs, getCategories } from "@/services/productStore";
 import ProductCard from "@/components/ProductCard";
 
 const SLIDE_IMAGES = [
@@ -16,10 +17,25 @@ const STEP_ICONS = ["🛒", "👤", "💳", "🧾"];
 
 export default function Home() {
   const { t } = useLanguage();
-  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [fleurs, setFleurs] = useState<Fleur[]>(() => getFleurs());
+  const [categories, setCategories] = useState(() => getCategories());
+  const [activeFilter, setActiveFilter] = useState<number | null>(null);
   const [current, setCurrent] = useState(0);
 
+  // Recharge à chaque montage (après retour depuis l'admin)
+  useEffect(() => {
+    setFleurs(getFleurs());
+    setCategories(getCategories());
+  }, []);
+
   const slides = t.hero.slides;
+
+  const catMap = useMemo(() => new Map(categories.map((c) => [c.id, c.nom])), [categories]);
+
+  const filtered = useMemo(() => {
+    if (!activeFilter) return fleurs;
+    return fleurs.filter((f) => f.categorieId === activeFilter);
+  }, [fleurs, activeFilter]);
 
   const goTo = useCallback(
     (i: number) => setCurrent((i + slides.length) % slides.length),
@@ -34,11 +50,6 @@ export default function Home() {
     }, AUTOPLAY_MS);
     return () => clearTimeout(id);
   }, [current, slides.length]);
-
-  const filtered = useMemo(() => {
-    if (!activeFilter) return products;
-    return products.filter((p) => p.tag === activeFilter);
-  }, [activeFilter]);
 
   return (
     <div className="animate-fade-up">
@@ -118,7 +129,7 @@ export default function Home() {
           <p className="text-sm text-ink-soft dark:text-gray-400">{t.home.productsSubtitle}</p>
         </div>
 
-        {/* Filtres */}
+        {/* Filtres par catégorie */}
         <div className="flex gap-2 overflow-x-auto pb-4 mb-6 -mx-1 px-1 justify-start md:justify-center">
           <button
             onClick={() => setActiveFilter(null)}
@@ -130,25 +141,29 @@ export default function Home() {
           >
             {t.home.all}
           </button>
-          {t.products.filters.map((f) => (
+          {categories.map((c) => (
             <button
-              key={f}
-              onClick={() => setActiveFilter(f)}
+              key={c.id}
+              onClick={() => setActiveFilter(c.id)}
               className={`whitespace-nowrap text-xs font-semibold px-4 py-2 rounded-full border transition-colors duration-200 ${
-                activeFilter === f
+                activeFilter === c.id
                   ? "border-coral text-coral bg-coral/5"
                   : "border-line dark:border-dark-line text-ink-soft dark:text-gray-300 hover:border-coral hover:text-coral"
               }`}
             >
-              {f}
+              {c.nom}
             </button>
           ))}
         </div>
 
         {/* Grille produits */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {filtered.map((product) => (
-            <ProductCard key={product.id} product={product} />
+          {filtered.map((fleur) => (
+            <ProductCard
+              key={fleur.id}
+              fleur={fleur}
+              categorieNom={catMap.get(fleur.categorieId) ?? ""}
+            />
           ))}
         </div>
       </section>
@@ -164,7 +179,6 @@ export default function Home() {
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-10 relative">
-            {/* Ligne de liaison (desktop) */}
             <div className="hidden lg:block absolute top-10 left-[12%] right-[12%] h-px bg-line dark:bg-dark-line" />
 
             {t.home.howSteps.map((s, i) => (

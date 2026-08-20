@@ -14,6 +14,8 @@ import Cart from "./pages/Cart";
 import Auth from "./pages/Auth";
 import Payment from "./pages/Payment";
 import Invoice from "./pages/Invoice";
+import Orders from "./pages/Orders";
+import Admin from "./pages/Admin";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -53,6 +55,22 @@ export default function App() {
                         element={
                           <ProtectedRoute>
                             <Invoice />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/orders"
+                        element={
+                          <ProtectedRoute>
+                            <Orders />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/admin"
+                        element={
+                          <ProtectedRoute>
+                            <Admin />
                           </ProtectedRoute>
                         }
                       />

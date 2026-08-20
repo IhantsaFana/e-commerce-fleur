@@ -41,6 +41,16 @@ export default function Header() {
           </Link>
           <LanguageSwitcher />
           <ThemeToggle />
+
+          {user && (
+            <Link
+              to="/orders"
+              className="text-xs font-semibold text-ink-soft dark:text-gray-300 hover:text-coral transition-colors duration-200 hidden md:inline-flex items-center gap-1"
+            >
+              📦 {t.orders.title}
+            </Link>
+          )}
+
           <Link to="/cart" className="relative hover:text-coral transition-colors duration-200" aria-label="Cart">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="text-ink dark:text-gray-100">
               <path d="M6 6h15l-1.5 9h-12L6 3H3" strokeLinecap="round" strokeLinejoin="round" />
