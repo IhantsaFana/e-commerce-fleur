@@ -1,22 +1,16 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { Fleur, Categorie, formatAr } from "../data/products";
+import { Fleur, formatAr } from "../data/products";
 import {
-  getFleurs,
-  getCategories,
-  saveFleur,
-  deleteFleur,
-  saveCategorie,
-  deleteCategorie,
-  nextFleurId,
-  nextCategorieId,
-} from "../services/productStore";
+  fetchProducts,
+  createProduct,
+  updateProduct,
+  removeProduct,
+} from "../services/productApi";
 import PhotoSlot from "../components/PhotoSlot";
-
-type Tab = "produits" | "categories";
 
 const emptyFleur = (): Fleur => ({
   id: 0,
@@ -26,6 +20,8 @@ const emptyFleur = (): Fleur => ({
   stock: 0,
   imageUrl: "",
   disponible: true,
+
+  // Votre backend n'a pas encore de category_id.
   categorieId: 1,
 });
 
@@ -34,16 +30,215 @@ export default function Admin() {
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const [tab, setTab] = useState<Tab>("produits");
-  const [fleurs, setFleurs] = useState<Fleur[]>(() => getFleurs());
-  const [categories, setCategories] = useState<Categorie[]>(() =>
-    getCategories()
-  );
+  const [fleurs, setFleurs] = useState<Fleur[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const [editing, setEditing] = useState<Fleur | null>(null);
   const [form, setForm] = useState<Fleur>(emptyFleur());
-  const [newCat, setNewCat] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  // Accès réservé uniquement au rôle Admin.
+  const inputClass =
+    "w-full border border-line dark:border-dark-line bg-white dark:bg-dark-surface text-ink dark:text-white rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-coral/50 focus:border-coral transition-colors duration-200";
+
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const products = await fetchProducts();
+
+      setFleurs(products);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Impossible de charger les produits depuis PostgreSQL";
+
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProducts();
+
+    const handleProductsUpdated = () => {
+      loadProducts();
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "fq_products_updated_at") {
+        loadProducts();
+      }
+    };
+
+    window.addEventListener(
+      "products-updated",
+      handleProductsUpdated
+    );
+
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(
+        "products-updated",
+        handleProductsUpdated
+      );
+
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  const updateForm = (field: keyof Fleur, value: any) => {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const startAdd = () => {
+    setError("");
+    setEditing(emptyFleur());
+    setForm(emptyFleur());
+  };
+
+  const startEdit = (fleur: Fleur) => {
+    setError("");
+    setEditing(fleur);
+    setForm({ ...fleur });
+  };
+
+  const cancelEdit = () => {
+    setEditing(null);
+    setForm(emptyFleur());
+    setError("");
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!form.nom.trim()) {
+      setError("Le nom du produit est obligatoire");
+      return;
+    }
+
+    if (form.prix <= 0) {
+      setError("Le prix doit être supérieur à 0");
+      return;
+    }
+
+    if (form.stock < 0) {
+      setError("Le stock ne peut pas être négatif");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+
+      const productToSave: Fleur = {
+        ...form,
+        nom: form.nom.trim(),
+        description: form.description.trim(),
+        imageUrl: form.imageUrl.trim(),
+      };
+
+      let savedProduct: Fleur;
+
+      // Modification d'un produit existant.
+      if (productToSave.id > 0) {
+        savedProduct = await updateProduct(productToSave);
+
+        // Mise à jour immédiate dans la liste Admin.
+        setFleurs((previous) =>
+          previous.map((product) =>
+            product.id === savedProduct.id
+              ? savedProduct
+              : product
+          )
+        );
+
+        showToast("Produit modifié avec succès", "success");
+      } else {
+        // Création d'un nouveau produit.
+        savedProduct = await createProduct(productToSave);
+
+        // Ajout immédiat dans la liste Admin.
+        setFleurs((previous) => [
+          ...previous,
+          savedProduct,
+        ]);
+
+        showToast("Produit ajouté avec succès", "success");
+      }
+
+      cancelEdit();
+
+      // Met à jour Home dans le même onglet.
+      window.dispatchEvent(new Event("products-updated"));
+
+      // Met à jour Home dans un autre onglet.
+      localStorage.setItem(
+        "fq_products_updated_at",
+        Date.now().toString()
+      );
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Erreur lors de la sauvegarde du produit";
+
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (
+    id: number,
+    productName: string
+  ) => {
+    const accepted = window.confirm(
+      `Supprimer définitivement le produit "${productName}" ?`
+    );
+
+    if (!accepted) return;
+
+    try {
+      setError("");
+
+      await removeProduct(id);
+
+      // Le produit disparaît immédiatement dans Admin.
+      setFleurs((previous) =>
+        previous.filter((product) => product.id !== id)
+      );
+
+      showToast("Produit supprimé avec succès", "success");
+
+      // Met à jour Home dans le même onglet.
+      window.dispatchEvent(new Event("products-updated"));
+
+      // Met à jour Home dans un autre onglet.
+      localStorage.setItem(
+        "fq_products_updated_at",
+        Date.now().toString()
+      );
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Erreur lors de la suppression du produit";
+
+      setError(message);
+      showToast(message, "error");
+    }
+  };
+
+  // Seuls les Admin peuvent voir cette page.
   if (user?.role?.trim().toLowerCase() !== "admin") {
     return (
       <div className="max-w-[600px] mx-auto px-6 py-24 text-center animate-fade-up">
@@ -67,89 +262,6 @@ export default function Admin() {
     );
   }
 
-  const refresh = () => {
-    setFleurs(getFleurs());
-    setCategories(getCategories());
-  };
-
-  const catMap = useMemo(
-    () => new Map(categories.map((category) => [category.id, category.nom])),
-    [categories]
-  );
-
-  const inputClass =
-    "w-full border border-line dark:border-dark-line bg-white dark:bg-dark-surface text-ink dark:text-white rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-coral/50 focus:border-coral transition-colors duration-200";
-
-  const updateForm = (field: keyof Fleur, value: any) =>
-    setForm((current) => ({ ...current, [field]: value }));
-
-  const startAdd = () => {
-    const id = nextFleurId();
-    const newFleur = { ...emptyFleur(), id };
-
-    setEditing(newFleur);
-    setForm(newFleur);
-  };
-
-  const startEdit = (fleur: Fleur) => {
-    setEditing(fleur);
-    setForm({ ...fleur });
-  };
-
-  const handleSaveFleur = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!form.nom.trim()) return;
-
-    saveFleur({
-      ...form,
-      nom: form.nom.trim(),
-    });
-
-    refresh();
-    setEditing(null);
-    showToast(t.admin.saved, "success");
-  };
-
-  const handleDeleteFleur = (id: number) => {
-    if (!window.confirm(t.admin.confirmDelete)) return;
-
-    deleteFleur(id);
-    refresh();
-    showToast(t.admin.deleted, "success");
-  };
-
-  const handleAddCat = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!newCat.trim()) return;
-
-    saveCategorie({
-      id: nextCategorieId(),
-      nom: newCat.trim(),
-      description: "",
-    });
-
-    setNewCat("");
-    refresh();
-    showToast(t.admin.saved, "success");
-  };
-
-  const handleDeleteCat = (id: number) => {
-    const inUse = fleurs.some((fleur) => fleur.categorieId === id);
-
-    if (inUse) {
-      showToast(t.admin.categoryInUse, "error");
-      return;
-    }
-
-    if (!window.confirm(t.admin.confirmDelete)) return;
-
-    deleteCategorie(id);
-    refresh();
-    showToast(t.admin.deleted, "success");
-  };
-
   return (
     <div className="max-w-[1200px] mx-auto px-6 py-10 animate-fade-up">
       <div className="flex items-center justify-between mb-6">
@@ -159,7 +271,7 @@ export default function Admin() {
           </h1>
 
           <p className="text-sm text-ink-soft dark:text-gray-400">
-            {t.admin.subtitle}
+            Gestion des produits enregistrés dans PostgreSQL.
           </p>
         </div>
 
@@ -171,315 +283,284 @@ export default function Admin() {
         </Link>
       </div>
 
-      <div className="flex mb-6 border border-line dark:border-dark-line rounded-lg p-1 bg-graybg dark:bg-dark-surface w-fit">
-        <button
-          onClick={() => setTab("produits")}
-          className={`px-5 py-2 text-sm font-semibold rounded-md transition-all duration-200 ${
-            tab === "produits"
-              ? "bg-white dark:bg-dark-bg text-coral shadow-sm"
-              : "text-ink-soft dark:text-gray-400"
-          }`}
-        >
-          {t.admin.productsTab} ({fleurs.length})
-        </button>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div>
+          <h2 className="font-display text-xl text-ink dark:text-white">
+            Produits ({fleurs.length})
+          </h2>
 
-        <button
-          onClick={() => setTab("categories")}
-          className={`px-5 py-2 text-sm font-semibold rounded-md transition-all duration-200 ${
-            tab === "categories"
-              ? "bg-white dark:bg-dark-bg text-coral shadow-sm"
-              : "text-ink-soft dark:text-gray-400"
-          }`}
-        >
-          {t.admin.categoriesTab} ({categories.length})
-        </button>
+          <p className="text-xs text-ink-soft dark:text-gray-400 mt-1">
+            Liste venant directement du backend FastAPI et PostgreSQL.
+          </p>
+        </div>
+
+        {!editing && (
+          <button
+            onClick={startAdd}
+            className="bg-sage hover:bg-sage-dark text-white text-sm font-semibold px-5 py-2.5 rounded-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+          >
+            + {t.admin.addProduct}
+          </button>
+        )}
       </div>
 
-      {tab === "produits" && (
-        <div className="space-y-6">
+      {error && (
+        <div className="mb-6 flex items-center gap-2 text-sm text-red-500 bg-red-500/10 border border-red-500/20 rounded-sm px-4 py-3">
+          {error}
+        </div>
+      )}
+
+      {editing && (
+        <form
+          onSubmit={handleSave}
+          className="border border-line dark:border-dark-line rounded-sm p-6 bg-white dark:bg-dark-surface space-y-4 mb-8"
+        >
+          <h2 className="font-display text-xl text-ink dark:text-white">
+            {editing.id > 0
+              ? "Modifier le produit"
+              : "Ajouter un produit"}
+          </h2>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
+                {t.admin.name}
+              </label>
+
+              <input
+                value={form.nom}
+                onChange={(e) => updateForm("nom", e.target.value)}
+                placeholder="Exemple : Bouquet de roses"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
+                {t.admin.price} (Ar)
+              </label>
+
+              <input
+                type="number"
+                min="1"
+                value={form.prix}
+                onChange={(e) =>
+                  updateForm("prix", Number(e.target.value))
+                }
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
+                {t.admin.stock}
+              </label>
+
+              <input
+                type="number"
+                min="0"
+                value={form.stock}
+                onChange={(e) =>
+                  updateForm("stock", Number(e.target.value))
+                }
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
+                {t.admin.image}
+              </label>
+
+              <input
+                value={form.imageUrl}
+                onChange={(e) =>
+                  updateForm("imageUrl", e.target.value)
+                }
+                placeholder="https://..."
+                className={inputClass}
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
+                {t.admin.description}
+              </label>
+
+              <textarea
+                value={form.description}
+                onChange={(e) =>
+                  updateForm("description", e.target.value)
+                }
+                rows={4}
+                className={inputClass}
+                placeholder="Description du produit..."
+              />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-ink dark:text-white">
+            <input
+              type="checkbox"
+              checked={form.disponible}
+              onChange={(e) =>
+                updateForm("disponible", e.target.checked)
+              }
+            />
+
+            {t.admin.available}
+          </label>
+
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              type="submit"
+              disabled={saving}
+              className="bg-sage hover:bg-sage-dark text-white text-sm font-semibold px-6 py-2.5 rounded-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {saving
+                ? "Sauvegarde..."
+                : editing.id > 0
+                  ? "Modifier"
+                  : "Ajouter"}
+            </button>
+
+            <button
+              type="button"
+              onClick={cancelEdit}
+              disabled={saving}
+              className="border border-line dark:border-dark-line text-ink-soft dark:text-gray-300 text-sm font-semibold px-6 py-2.5 rounded-sm hover:text-coral transition-colors"
+            >
+              {t.admin.cancel}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {loading && (
+        <div className="py-16 text-center text-sm text-ink-soft dark:text-gray-400">
+          Chargement des produits depuis PostgreSQL...
+        </div>
+      )}
+
+      {!loading && fleurs.length === 0 && (
+        <div className="border border-line dark:border-dark-line rounded-sm p-12 bg-white dark:bg-dark-surface text-center">
+          <div className="text-5xl mb-4">🌷</div>
+
+          <h2 className="font-display text-xl text-ink dark:text-white mb-2">
+            Aucun produit dans PostgreSQL
+          </h2>
+
+          <p className="text-sm text-ink-soft dark:text-gray-400 mb-5">
+            Cliquez sur « Ajouter un produit » pour créer votre premier produit.
+          </p>
+
           {!editing && (
             <button
               onClick={startAdd}
-              className="bg-sage hover:bg-sage-dark text-white text-sm font-semibold px-5 py-2.5 rounded-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+              className="bg-sage hover:bg-sage-dark text-white text-sm font-semibold px-5 py-2.5 rounded-sm"
             >
               + {t.admin.addProduct}
             </button>
           )}
-
-          {editing && (
-            <form
-              onSubmit={handleSaveFleur}
-              className="border border-line dark:border-dark-line rounded-sm p-6 bg-white dark:bg-dark-surface space-y-4"
-            >
-              <h2 className="font-display text-lg text-ink dark:text-white">
-                {fleurs.some((fleur) => fleur.id === editing.id)
-                  ? t.admin.editProduct
-                  : t.admin.addProduct}
-              </h2>
-
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
-                    {t.admin.name}
-                  </label>
-
-                  <input
-                    value={form.nom}
-                    onChange={(e) => updateForm("nom", e.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
-                    {t.admin.category}
-                  </label>
-
-                  <select
-                    value={form.categorieId}
-                    onChange={(e) =>
-                      updateForm("categorieId", Number(e.target.value))
-                    }
-                    className={inputClass}
-                  >
-                    {categories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.nom}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
-                    {t.admin.price} (Ar)
-                  </label>
-
-                  <input
-                    type="number"
-                    value={form.prix}
-                    onChange={(e) =>
-                      updateForm("prix", Number(e.target.value))
-                    }
-                    className={inputClass}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
-                    {t.admin.stock}
-                  </label>
-
-                  <input
-                    type="number"
-                    value={form.stock}
-                    onChange={(e) =>
-                      updateForm("stock", Number(e.target.value))
-                    }
-                    className={inputClass}
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
-                    {t.admin.image}
-                  </label>
-
-                  <input
-                    value={form.imageUrl}
-                    onChange={(e) =>
-                      updateForm("imageUrl", e.target.value)
-                    }
-                    className={inputClass}
-                    placeholder="https://..."
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
-                    {t.admin.description}
-                  </label>
-
-                  <textarea
-                    value={form.description}
-                    onChange={(e) =>
-                      updateForm("description", e.target.value)
-                    }
-                    rows={3}
-                    className={inputClass}
-                  />
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 text-sm text-ink dark:text-white">
-                <input
-                  type="checkbox"
-                  checked={form.disponible}
-                  onChange={(e) =>
-                    updateForm("disponible", e.target.checked)
-                  }
-                />
-                {t.admin.available}
-              </label>
-
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  className="bg-sage hover:bg-sage-dark text-white text-sm font-semibold px-6 py-2.5 rounded-sm transition-colors"
-                >
-                  {t.admin.save}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setEditing(null)}
-                  className="border border-line dark:border-dark-line text-ink-soft dark:text-gray-300 text-sm font-semibold px-6 py-2.5 rounded-sm hover:text-coral transition-colors"
-                >
-                  {t.admin.cancel}
-                </button>
-              </div>
-            </form>
-          )}
-
-          <div className="border border-line dark:border-dark-line rounded-sm overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-graybg dark:bg-dark-surface text-left">
-                <tr>
-                  <th className="px-4 py-3 font-semibold text-ink dark:text-white">
-                    {t.admin.image}
-                  </th>
-                  <th className="px-4 py-3 font-semibold text-ink dark:text-white">
-                    {t.admin.name}
-                  </th>
-                  <th className="px-4 py-3 font-semibold text-ink dark:text-white">
-                    {t.admin.category}
-                  </th>
-                  <th className="px-4 py-3 font-semibold text-ink dark:text-white text-right">
-                    {t.admin.price}
-                  </th>
-                  <th className="px-4 py-3 font-semibold text-ink dark:text-white text-center">
-                    {t.admin.stock}
-                  </th>
-                  <th className="px-4 py-3 font-semibold text-ink dark:text-white text-center">
-                    {t.admin.available}
-                  </th>
-                  <th className="px-4 py-3 font-semibold text-ink dark:text-white text-right">
-                    {t.admin.actions}
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-line dark:divide-dark-line">
-                {fleurs.map((fleur) => (
-                  <tr
-                    key={fleur.id}
-                    className="hover:bg-graybg/50 dark:hover:bg-dark-surface/50 transition-colors"
-                  >
-                    <td className="px-4 py-3 w-16">
-                      <PhotoSlot
-                        src={fleur.imageUrl}
-                        alt={fleur.nom}
-                        className="w-12 h-12"
-                      />
-                    </td>
-
-                    <td className="px-4 py-3 text-ink dark:text-white font-medium">
-                      {fleur.nom}
-                    </td>
-
-                    <td className="px-4 py-3 text-ink-soft dark:text-gray-400">
-                      {catMap.get(fleur.categorieId) ?? "-"}
-                    </td>
-
-                    <td className="px-4 py-3 text-right text-ink dark:text-white">
-                      {formatAr(fleur.prix)}
-                    </td>
-
-                    <td className="px-4 py-3 text-center text-ink-soft dark:text-gray-400">
-                      {fleur.stock}
-                    </td>
-
-                    <td className="px-4 py-3 text-center">
-                      {fleur.disponible ? (
-                        <span className="text-sage font-bold">✓</span>
-                      ) : (
-                        <span className="text-red-500 font-bold">✕</span>
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => startEdit(fleur)}
-                          className="text-xs font-semibold text-ink-soft dark:text-gray-300 hover:text-coral border border-line dark:border-dark-line rounded-sm px-3 py-1 transition-colors"
-                        >
-                          {t.admin.edit}
-                        </button>
-
-                        <button
-                          onClick={() => handleDeleteFleur(fleur.id)}
-                          className="text-xs font-semibold text-red-500 hover:text-white hover:bg-red-500 border border-red-500/40 rounded-sm px-3 py-1 transition-colors"
-                        >
-                          {t.admin.delete}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
       )}
 
-      {tab === "categories" && (
-        <div className="space-y-6 max-w-2xl">
-          <form onSubmit={handleAddCat} className="flex gap-3">
-            <input
-              value={newCat}
-              onChange={(e) => setNewCat(e.target.value)}
-              placeholder={t.admin.newCategory}
-              className={inputClass}
-            />
+      {!loading && fleurs.length > 0 && (
+        <div className="border border-line dark:border-dark-line rounded-sm overflow-x-auto">
+          <table className="w-full min-w-[850px] text-sm">
+            <thead className="bg-graybg dark:bg-dark-surface text-left">
+              <tr>
+                <th className="px-4 py-3 font-semibold text-ink dark:text-white">
+                  {t.admin.image}
+                </th>
 
-            <button
-              type="submit"
-              className="bg-sage hover:bg-sage-dark text-white text-sm font-semibold px-5 py-2 rounded-sm whitespace-nowrap transition-colors"
-            >
-              + {t.admin.add}
-            </button>
-          </form>
+                <th className="px-4 py-3 font-semibold text-ink dark:text-white">
+                  {t.admin.name}
+                </th>
 
-          <div className="border border-line dark:border-dark-line rounded-sm overflow-hidden">
-            {categories.map((category) => (
-              <div
-                key={category.id}
-                className="flex items-center justify-between px-4 py-3 border-b border-line dark:border-dark-line last:border-b-0"
-              >
-                <div>
-                  <span className="font-medium text-ink dark:text-white">
-                    {category.nom}
-                  </span>
+                <th className="px-4 py-3 font-semibold text-ink dark:text-white text-right">
+                  {t.admin.price}
+                </th>
 
-                  <span className="ml-3 text-xs text-ink-soft dark:text-gray-500">
-                    {
-                      fleurs.filter(
-                        (fleur) => fleur.categorieId === category.id
-                      ).length
-                    }{" "}
-                    {t.admin.articles}
-                  </span>
-                </div>
+                <th className="px-4 py-3 font-semibold text-ink dark:text-white text-center">
+                  {t.admin.stock}
+                </th>
 
-                <button
-                  onClick={() => handleDeleteCat(category.id)}
-                  className="text-xs font-semibold text-red-500 hover:text-white hover:bg-red-500 border border-red-500/40 rounded-sm px-3 py-1 transition-colors"
+                <th className="px-4 py-3 font-semibold text-ink dark:text-white text-center">
+                  {t.admin.available}
+                </th>
+
+                <th className="px-4 py-3 font-semibold text-ink dark:text-white text-right">
+                  {t.admin.actions}
+                </th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-line dark:divide-dark-line">
+              {fleurs.map((fleur) => (
+                <tr
+                  key={fleur.id}
+                  className="hover:bg-graybg/50 dark:hover:bg-dark-surface/50 transition-colors"
                 >
-                  {t.admin.delete}
-                </button>
-              </div>
-            ))}
-          </div>
+                  <td className="px-4 py-3 w-20">
+                    <PhotoSlot
+                      src={fleur.imageUrl}
+                      alt={fleur.nom}
+                      className="w-12 h-12"
+                    />
+                  </td>
+
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-ink dark:text-white">
+                      {fleur.nom}
+                    </p>
+
+                    {fleur.description && (
+                      <p className="max-w-xs truncate text-xs text-ink-soft dark:text-gray-400 mt-1">
+                        {fleur.description}
+                      </p>
+                    )}
+                  </td>
+
+                  <td className="px-4 py-3 text-right text-ink dark:text-white">
+                    {formatAr(fleur.prix)}
+                  </td>
+
+                  <td className="px-4 py-3 text-center text-ink-soft dark:text-gray-400">
+                    {fleur.stock}
+                  </td>
+
+                  <td className="px-4 py-3 text-center">
+                    {fleur.disponible ? (
+                      <span className="text-sage font-bold">✓</span>
+                    ) : (
+                      <span className="text-red-500 font-bold">✕</span>
+                    )}
+                  </td>
+
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => startEdit(fleur)}
+                        className="text-xs font-semibold text-ink-soft dark:text-gray-300 hover:text-coral border border-line dark:border-dark-line rounded-sm px-3 py-1.5 transition-colors"
+                      >
+                        {t.admin.edit}
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          handleDelete(fleur.id, fleur.nom)
+                        }
+                        className="text-xs font-semibold text-red-500 hover:text-white hover:bg-red-500 border border-red-500/40 rounded-sm px-3 py-1.5 transition-colors"
+                      >
+                        {t.admin.delete}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
