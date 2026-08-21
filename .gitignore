@@ -1,8 +1,39 @@
-.venv
-.env
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
 
-__pycache__/
-__init__.py
-node_modules/
-dist/
-*.local
+# Backend - Python / FastAPI
+backend/.env
+backend/**/.env
+backend/**/.env.*
+backend/.venv/
+backend/venv/
+backend/**/__pycache__/
+backend/**/*.py[cod]
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.coverage
+backend/htmlcov/
+backend/*.sqlite3
+backend/*.db
+
+# Frontend - Node / Vite
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+!frontend/.env.example.com
+frontend/.vite/
+frontend/coverage/
+frontend/*.local
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
