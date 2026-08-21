@@ -1,4 +1,9 @@
-import { useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Link } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext";
 import { useAuth } from "../context/AuthContext";
@@ -12,7 +17,15 @@ import {
 } from "../services/productApi";
 import PhotoSlot from "../components/PhotoSlot";
 
-const emptyFleur = (): Fleur => ({
+type ProductFilter =
+  | "all"
+  | "available"
+  | "out_of_stock"
+  | "inactive";
+
+const PAGE_SIZE = 8;
+
+const emptyProduct = (): Fleur => ({
   id: 0,
   nom: "",
   description: "",
@@ -20,8 +33,6 @@ const emptyFleur = (): Fleur => ({
   stock: 0,
   imageUrl: "",
   disponible: true,
-
-  // Votre backend n'a pas encore de category_id.
   categorieId: 1,
 });
 
@@ -30,36 +41,40 @@ export default function Admin() {
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const [fleurs, setFleurs] = useState<Fleur[]>([]);
+  const [products, setProducts] = useState<Fleur[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<ProductFilter>("all");
+  const [page, setPage] = useState(1);
+
   const [editing, setEditing] = useState<Fleur | null>(null);
-  const [form, setForm] = useState<Fleur>(emptyFleur());
+  const [form, setForm] = useState<Fleur>(emptyProduct());
   const [saving, setSaving] = useState(false);
 
   const inputClass =
-    "w-full border border-line dark:border-dark-line bg-white dark:bg-dark-surface text-ink dark:text-white rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-coral/50 focus:border-coral transition-colors duration-200";
+    "w-full border border-line dark:border-dark-line bg-white dark:bg-dark-surface text-ink dark:text-white rounded-sm px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-coral/50 focus:border-coral transition-colors";
 
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
 
-      const products = await fetchProducts();
+      const data = await fetchProducts();
 
-      setFleurs(products);
+      setProducts(data);
     } catch (err: unknown) {
       const message =
         err instanceof Error
           ? err.message
-          : "Impossible de charger les produits depuis PostgreSQL";
+          : "Impossible de charger les produits";
 
       setError(message);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadProducts();
@@ -89,7 +104,84 @@ export default function Admin() {
 
       window.removeEventListener("storage", handleStorage);
     };
-  }, []);
+  }, [loadProducts]);
+
+  const stats = useMemo(() => {
+    const total = products.length;
+
+    const available = products.filter(
+      (product) =>
+        product.disponible && product.stock > 0
+    ).length;
+
+    const outOfStock = products.filter(
+      (product) => product.stock <= 0
+    ).length;
+
+    const inactive = products.filter(
+      (product) =>
+        !product.disponible && product.stock > 0
+    ).length;
+
+    const stockTotal = products.reduce(
+      (sum, product) => sum + product.stock,
+      0
+    );
+
+    return {
+      total,
+      available,
+      outOfStock,
+      inactive,
+      stockTotal,
+    };
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    return products.filter((product) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        product.nom.toLowerCase().includes(normalizedSearch) ||
+        product.description
+          .toLowerCase()
+          .includes(normalizedSearch);
+
+      const matchesFilter =
+        filter === "all" ||
+        (filter === "available" &&
+          product.disponible &&
+          product.stock > 0) ||
+        (filter === "out_of_stock" &&
+          product.stock <= 0) ||
+        (filter === "inactive" &&
+          !product.disponible &&
+          product.stock > 0);
+
+      return matchesSearch && matchesFilter;
+    });
+  }, [products, search, filter]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredProducts.length / PAGE_SIZE)
+  );
+
+  const visibleProducts = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+
+    return filteredProducts.slice(
+      start,
+      start + PAGE_SIZE
+    );
+  }, [filteredProducts, page]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   const updateForm = (field: keyof Fleur, value: any) => {
     setForm((current) => ({
@@ -100,20 +192,29 @@ export default function Admin() {
 
   const startAdd = () => {
     setError("");
-    setEditing(emptyFleur());
-    setForm(emptyFleur());
+    setEditing(emptyProduct());
+    setForm(emptyProduct());
   };
 
-  const startEdit = (fleur: Fleur) => {
+  const startEdit = (product: Fleur) => {
     setError("");
-    setEditing(fleur);
-    setForm({ ...fleur });
+    setEditing(product);
+    setForm({ ...product });
   };
 
   const cancelEdit = () => {
     setEditing(null);
-    setForm(emptyFleur());
+    setForm(emptyProduct());
     setError("");
+  };
+
+  const notifyProductsChanged = () => {
+    window.dispatchEvent(new Event("products-updated"));
+
+    localStorage.setItem(
+      "fq_products_updated_at",
+      Date.now().toString()
+    );
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -147,12 +248,10 @@ export default function Admin() {
 
       let savedProduct: Fleur;
 
-      // Modification d'un produit existant.
       if (productToSave.id > 0) {
         savedProduct = await updateProduct(productToSave);
 
-        // Mise à jour immédiate dans la liste Admin.
-        setFleurs((previous) =>
+        setProducts((previous) =>
           previous.map((product) =>
             product.id === savedProduct.id
               ? savedProduct
@@ -162,11 +261,9 @@ export default function Admin() {
 
         showToast("Produit modifié avec succès", "success");
       } else {
-        // Création d'un nouveau produit.
         savedProduct = await createProduct(productToSave);
 
-        // Ajout immédiat dans la liste Admin.
-        setFleurs((previous) => [
+        setProducts((previous) => [
           ...previous,
           savedProduct,
         ]);
@@ -175,20 +272,12 @@ export default function Admin() {
       }
 
       cancelEdit();
-
-      // Met à jour Home dans le même onglet.
-      window.dispatchEvent(new Event("products-updated"));
-
-      // Met à jour Home dans un autre onglet.
-      localStorage.setItem(
-        "fq_products_updated_at",
-        Date.now().toString()
-      );
+      notifyProductsChanged();
     } catch (err: unknown) {
       const message =
         err instanceof Error
           ? err.message
-          : "Erreur lors de la sauvegarde du produit";
+          : "Erreur lors de la sauvegarde";
 
       setError(message);
       showToast(message, "error");
@@ -202,7 +291,7 @@ export default function Admin() {
     productName: string
   ) => {
     const accepted = window.confirm(
-      `Supprimer définitivement le produit "${productName}" ?`
+      `Supprimer définitivement "${productName}" ?`
     );
 
     if (!accepted) return;
@@ -212,34 +301,43 @@ export default function Admin() {
 
       await removeProduct(id);
 
-      // Le produit disparaît immédiatement dans Admin.
-      setFleurs((previous) =>
+      setProducts((previous) =>
         previous.filter((product) => product.id !== id)
       );
 
       showToast("Produit supprimé avec succès", "success");
 
-      // Met à jour Home dans le même onglet.
-      window.dispatchEvent(new Event("products-updated"));
-
-      // Met à jour Home dans un autre onglet.
-      localStorage.setItem(
-        "fq_products_updated_at",
-        Date.now().toString()
-      );
+      notifyProductsChanged();
     } catch (err: unknown) {
       const message =
         err instanceof Error
           ? err.message
-          : "Erreur lors de la suppression du produit";
+          : "Erreur lors de la suppression";
 
       setError(message);
       showToast(message, "error");
     }
   };
 
-  // Seuls les Admin peuvent voir cette page.
-  if (user?.role?.trim().toLowerCase() !== "admin") {
+  const handleFilterChange = (
+    newFilter: ProductFilter
+  ) => {
+    setFilter(newFilter);
+    setPage(1);
+  };
+
+  const handleSearchChange = (
+    value: string
+  ) => {
+    setSearch(value);
+    setPage(1);
+  };
+
+  const isAdmin =
+    user?.role?.trim().toLowerCase() === "admin";
+
+  // Sécurité supplémentaire, même si ProtectedRoute bloque déjà le Client.
+  if (!isAdmin) {
     return (
       <div className="max-w-[600px] mx-auto px-6 py-24 text-center animate-fade-up">
         <div className="text-5xl mb-4">🔒</div>
@@ -253,91 +351,143 @@ export default function Admin() {
         </p>
 
         <Link
-          to="/"
+          to="/payment"
           className="inline-block bg-sage hover:bg-sage-dark text-white text-sm font-semibold px-6 py-3 rounded-sm"
         >
-          {t.admin.backHome}
+          Aller au paiement
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="max-w-[1200px] mx-auto px-6 py-10 animate-fade-up">
-      <div className="flex items-center justify-between mb-6">
+    <div className="max-w-[1400px] mx-auto px-6 py-10 animate-fade-up">
+      {/* En-tête */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-coral mb-1">
+            Administration
+          </p>
+
           <h1 className="font-display text-3xl text-ink dark:text-white">
-            {t.admin.title}
+            Dashboard produits
           </h1>
 
-          <p className="text-sm text-ink-soft dark:text-gray-400">
-            Gestion des produits enregistrés dans PostgreSQL.
+          <p className="text-sm text-ink-soft dark:text-gray-400 mt-1">
+            Gestion des produits connectée à PostgreSQL.
           </p>
         </div>
 
-        <Link
-          to="/"
-          className="text-xs text-ink-soft dark:text-gray-400 hover:text-coral transition-colors"
-        >
-          ← {t.admin.backHome}
-        </Link>
-      </div>
-
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div>
-          <h2 className="font-display text-xl text-ink dark:text-white">
-            Produits ({fleurs.length})
-          </h2>
-
-          <p className="text-xs text-ink-soft dark:text-gray-400 mt-1">
-            Liste venant directement du backend FastAPI et PostgreSQL.
-          </p>
-        </div>
-
-        {!editing && (
+        <div className="flex items-center gap-3">
           <button
-            onClick={startAdd}
-            className="bg-sage hover:bg-sage-dark text-white text-sm font-semibold px-5 py-2.5 rounded-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+            type="button"
+            onClick={loadProducts}
+            className="border border-line dark:border-dark-line text-ink dark:text-white text-sm font-semibold px-4 py-2.5 rounded-sm hover:border-coral hover:text-coral transition-colors"
           >
-            + {t.admin.addProduct}
+            ↻ Actualiser
           </button>
-        )}
+
+          {!editing && (
+            <button
+              type="button"
+              onClick={startAdd}
+              className="bg-sage hover:bg-sage-dark text-white text-sm font-semibold px-5 py-2.5 rounded-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+            >
+              + Ajouter un produit
+            </button>
+          )}
+        </div>
       </div>
 
-      {error && (
-        <div className="mb-6 flex items-center gap-2 text-sm text-red-500 bg-red-500/10 border border-red-500/20 rounded-sm px-4 py-3">
-          {error}
+      {/* Statistiques */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        <div className="border border-line dark:border-dark-line bg-white dark:bg-dark-surface rounded-sm p-4">
+          <p className="text-xs text-ink-soft dark:text-gray-400">
+            Produits total
+          </p>
+          <p className="font-display text-3xl text-ink dark:text-white mt-1">
+            {stats.total}
+          </p>
         </div>
-      )}
 
+        <div className="border border-line dark:border-dark-line bg-white dark:bg-dark-surface rounded-sm p-4">
+          <p className="text-xs text-ink-soft dark:text-gray-400">
+            Disponibles
+          </p>
+          <p className="font-display text-3xl text-sage mt-1">
+            {stats.available}
+          </p>
+        </div>
+
+        <div className="border border-line dark:border-dark-line bg-white dark:bg-dark-surface rounded-sm p-4">
+          <p className="text-xs text-ink-soft dark:text-gray-400">
+            Rupture de stock
+          </p>
+          <p className="font-display text-3xl text-red-500 mt-1">
+            {stats.outOfStock}
+          </p>
+        </div>
+
+        <div className="border border-line dark:border-dark-line bg-white dark:bg-dark-surface rounded-sm p-4">
+          <p className="text-xs text-ink-soft dark:text-gray-400">
+            Désactivés
+          </p>
+          <p className="font-display text-3xl text-gold mt-1">
+            {stats.inactive}
+          </p>
+        </div>
+
+        <div className="border border-line dark:border-dark-line bg-white dark:bg-dark-surface rounded-sm p-4">
+          <p className="text-xs text-ink-soft dark:text-gray-400">
+            Stock total
+          </p>
+          <p className="font-display text-3xl text-coral mt-1">
+            {stats.stockTotal}
+          </p>
+        </div>
+      </div>
+
+      {/* Formulaire CRUD */}
       {editing && (
         <form
           onSubmit={handleSave}
           className="border border-line dark:border-dark-line rounded-sm p-6 bg-white dark:bg-dark-surface space-y-4 mb-8"
         >
-          <h2 className="font-display text-xl text-ink dark:text-white">
-            {editing.id > 0
-              ? "Modifier le produit"
-              : "Ajouter un produit"}
-          </h2>
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="font-display text-xl text-ink dark:text-white">
+              {editing.id > 0
+                ? "Modifier le produit"
+                : "Ajouter un produit"}
+            </h2>
+
+            <button
+              type="button"
+              onClick={cancelEdit}
+              className="text-xs font-semibold text-ink-soft dark:text-gray-400 hover:text-coral"
+            >
+              ✕ Fermer
+            </button>
+          </div>
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
-                {t.admin.name}
+                Nom du produit
               </label>
 
               <input
                 value={form.nom}
-                onChange={(e) => updateForm("nom", e.target.value)}
-                placeholder="Exemple : Bouquet de roses"
+                onChange={(e) =>
+                  updateForm("nom", e.target.value)
+                }
                 className={inputClass}
+                placeholder="Bouquet de roses"
               />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
-                {t.admin.price} (Ar)
+                Prix (Ar)
               </label>
 
               <input
@@ -353,7 +503,7 @@ export default function Admin() {
 
             <div>
               <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
-                {t.admin.stock}
+                Stock
               </label>
 
               <input
@@ -369,7 +519,7 @@ export default function Admin() {
 
             <div>
               <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
-                {t.admin.image}
+                URL image
               </label>
 
               <input
@@ -377,14 +527,14 @@ export default function Admin() {
                 onChange={(e) =>
                   updateForm("imageUrl", e.target.value)
                 }
-                placeholder="https://..."
                 className={inputClass}
+                placeholder="https://..."
               />
             </div>
 
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-ink-soft dark:text-gray-400 mb-1">
-                {t.admin.description}
+                Description
               </label>
 
               <textarea
@@ -407,8 +557,7 @@ export default function Admin() {
                 updateForm("disponible", e.target.checked)
               }
             />
-
-            {t.admin.available}
+            Produit disponible
           </label>
 
           <div className="flex flex-col sm:flex-row gap-3">
@@ -426,142 +575,273 @@ export default function Admin() {
 
             <button
               type="button"
-              onClick={cancelEdit}
               disabled={saving}
+              onClick={cancelEdit}
               className="border border-line dark:border-dark-line text-ink-soft dark:text-gray-300 text-sm font-semibold px-6 py-2.5 rounded-sm hover:text-coral transition-colors"
             >
-              {t.admin.cancel}
+              Annuler
             </button>
           </div>
         </form>
       )}
 
-      {loading && (
-        <div className="py-16 text-center text-sm text-ink-soft dark:text-gray-400">
-          Chargement des produits depuis PostgreSQL...
+      {error && (
+        <div className="mb-6 text-sm text-red-500 bg-red-500/10 border border-red-500/20 rounded-sm px-4 py-3">
+          {error}
         </div>
       )}
 
-      {!loading && fleurs.length === 0 && (
-        <div className="border border-line dark:border-dark-line rounded-sm p-12 bg-white dark:bg-dark-surface text-center">
+      {/* Recherche et filtres */}
+      <div className="border border-line dark:border-dark-line bg-white dark:bg-dark-surface rounded-sm p-4 mb-5">
+        <div className="flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
+          <div className="relative w-full lg:max-w-md">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft dark:text-gray-400"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-4-4" strokeLinecap="round" />
+            </svg>
+
+            <input
+              value={search}
+              onChange={(e) =>
+                handleSearchChange(e.target.value)
+              }
+              className={`${inputClass} pl-10`}
+              placeholder="Rechercher un produit..."
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => handleFilterChange("all")}
+              className={`text-xs font-semibold px-3 py-2 rounded-full border transition-colors ${
+                filter === "all"
+                  ? "border-coral text-coral bg-coral/5"
+                  : "border-line dark:border-dark-line text-ink-soft dark:text-gray-300"
+              }`}
+            >
+              Tous ({stats.total})
+            </button>
+
+            <button
+              onClick={() => handleFilterChange("available")}
+              className={`text-xs font-semibold px-3 py-2 rounded-full border transition-colors ${
+                filter === "available"
+                  ? "border-sage text-sage bg-sage/5"
+                  : "border-line dark:border-dark-line text-ink-soft dark:text-gray-300"
+              }`}
+            >
+              Disponibles ({stats.available})
+            </button>
+
+            <button
+              onClick={() => handleFilterChange("out_of_stock")}
+              className={`text-xs font-semibold px-3 py-2 rounded-full border transition-colors ${
+                filter === "out_of_stock"
+                  ? "border-red-500 text-red-500 bg-red-500/5"
+                  : "border-line dark:border-dark-line text-ink-soft dark:text-gray-300"
+              }`}
+            >
+              Rupture ({stats.outOfStock})
+            </button>
+
+            <button
+              onClick={() => handleFilterChange("inactive")}
+              className={`text-xs font-semibold px-3 py-2 rounded-full border transition-colors ${
+                filter === "inactive"
+                  ? "border-gold text-gold bg-gold/5"
+                  : "border-line dark:border-dark-line text-ink-soft dark:text-gray-300"
+              }`}
+            >
+              Désactivés ({stats.inactive})
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tableau */}
+      {loading && (
+        <div className="py-16 text-center text-sm text-ink-soft dark:text-gray-400">
+          Chargement depuis PostgreSQL...
+        </div>
+      )}
+
+      {!loading && filteredProducts.length === 0 && (
+        <div className="border border-line dark:border-dark-line bg-white dark:bg-dark-surface rounded-sm p-12 text-center">
           <div className="text-5xl mb-4">🌷</div>
 
           <h2 className="font-display text-xl text-ink dark:text-white mb-2">
-            Aucun produit dans PostgreSQL
+            Aucun produit trouvé
           </h2>
 
-          <p className="text-sm text-ink-soft dark:text-gray-400 mb-5">
-            Cliquez sur « Ajouter un produit » pour créer votre premier produit.
+          <p className="text-sm text-ink-soft dark:text-gray-400">
+            Modifiez la recherche ou ajoutez un nouveau produit.
           </p>
-
-          {!editing && (
-            <button
-              onClick={startAdd}
-              className="bg-sage hover:bg-sage-dark text-white text-sm font-semibold px-5 py-2.5 rounded-sm"
-            >
-              + {t.admin.addProduct}
-            </button>
-          )}
         </div>
       )}
 
-      {!loading && fleurs.length > 0 && (
-        <div className="border border-line dark:border-dark-line rounded-sm overflow-x-auto">
-          <table className="w-full min-w-[850px] text-sm">
-            <thead className="bg-graybg dark:bg-dark-surface text-left">
-              <tr>
-                <th className="px-4 py-3 font-semibold text-ink dark:text-white">
-                  {t.admin.image}
-                </th>
+      {!loading && filteredProducts.length > 0 && (
+        <>
+          <div className="border border-line dark:border-dark-line rounded-sm overflow-x-auto">
+            <table className="w-full min-w-[950px] text-sm">
+              <thead className="bg-graybg dark:bg-dark-surface text-left">
+                <tr>
+                  <th className="px-4 py-3 font-semibold text-ink dark:text-white">
+                    Image
+                  </th>
 
-                <th className="px-4 py-3 font-semibold text-ink dark:text-white">
-                  {t.admin.name}
-                </th>
+                  <th className="px-4 py-3 font-semibold text-ink dark:text-white">
+                    Produit
+                  </th>
 
-                <th className="px-4 py-3 font-semibold text-ink dark:text-white text-right">
-                  {t.admin.price}
-                </th>
+                  <th className="px-4 py-3 font-semibold text-ink dark:text-white text-right">
+                    Prix
+                  </th>
 
-                <th className="px-4 py-3 font-semibold text-ink dark:text-white text-center">
-                  {t.admin.stock}
-                </th>
+                  <th className="px-4 py-3 font-semibold text-ink dark:text-white text-center">
+                    Stock
+                  </th>
 
-                <th className="px-4 py-3 font-semibold text-ink dark:text-white text-center">
-                  {t.admin.available}
-                </th>
+                  <th className="px-4 py-3 font-semibold text-ink dark:text-white text-center">
+                    État
+                  </th>
 
-                <th className="px-4 py-3 font-semibold text-ink dark:text-white text-right">
-                  {t.admin.actions}
-                </th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-line dark:divide-dark-line">
-              {fleurs.map((fleur) => (
-                <tr
-                  key={fleur.id}
-                  className="hover:bg-graybg/50 dark:hover:bg-dark-surface/50 transition-colors"
-                >
-                  <td className="px-4 py-3 w-20">
-                    <PhotoSlot
-                      src={fleur.imageUrl}
-                      alt={fleur.nom}
-                      className="w-12 h-12"
-                    />
-                  </td>
-
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-ink dark:text-white">
-                      {fleur.nom}
-                    </p>
-
-                    {fleur.description && (
-                      <p className="max-w-xs truncate text-xs text-ink-soft dark:text-gray-400 mt-1">
-                        {fleur.description}
-                      </p>
-                    )}
-                  </td>
-
-                  <td className="px-4 py-3 text-right text-ink dark:text-white">
-                    {formatAr(fleur.prix)}
-                  </td>
-
-                  <td className="px-4 py-3 text-center text-ink-soft dark:text-gray-400">
-                    {fleur.stock}
-                  </td>
-
-                  <td className="px-4 py-3 text-center">
-                    {fleur.disponible ? (
-                      <span className="text-sage font-bold">✓</span>
-                    ) : (
-                      <span className="text-red-500 font-bold">✕</span>
-                    )}
-                  </td>
-
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => startEdit(fleur)}
-                        className="text-xs font-semibold text-ink-soft dark:text-gray-300 hover:text-coral border border-line dark:border-dark-line rounded-sm px-3 py-1.5 transition-colors"
-                      >
-                        {t.admin.edit}
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          handleDelete(fleur.id, fleur.nom)
-                        }
-                        className="text-xs font-semibold text-red-500 hover:text-white hover:bg-red-500 border border-red-500/40 rounded-sm px-3 py-1.5 transition-colors"
-                      >
-                        {t.admin.delete}
-                      </button>
-                    </div>
-                  </td>
+                  <th className="px-4 py-3 font-semibold text-ink dark:text-white text-right">
+                    Actions
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+
+              <tbody className="divide-y divide-line dark:divide-dark-line">
+                {visibleProducts.map((product) => (
+                  <tr
+                    key={product.id}
+                    className="hover:bg-graybg/50 dark:hover:bg-dark-surface/50 transition-colors"
+                  >
+                    <td className="px-4 py-3 w-20">
+                      <PhotoSlot
+                        src={product.imageUrl}
+                        alt={product.nom}
+                        className="w-12 h-12"
+                      />
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-ink dark:text-white">
+                        {product.nom}
+                      </p>
+
+                      {product.description && (
+                        <p className="max-w-xs truncate text-xs text-ink-soft dark:text-gray-400 mt-1">
+                          {product.description}
+                        </p>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3 text-right font-semibold text-ink dark:text-white">
+                      {formatAr(product.prix)}
+                    </td>
+
+                    <td className="px-4 py-3 text-center">
+                      <span
+                        className={`font-semibold ${
+                          product.stock <= 0
+                            ? "text-red-500"
+                            : "text-ink dark:text-white"
+                        }`}
+                      >
+                        {product.stock}
+                      </span>
+                    </td>
+
+                    <td className="px-4 py-3 text-center">
+                      {product.stock <= 0 ? (
+                        <span className="text-xs font-bold text-red-500">
+                          Rupture
+                        </span>
+                      ) : product.disponible ? (
+                        <span className="text-xs font-bold text-sage">
+                          Disponible
+                        </span>
+                      ) : (
+                        <span className="text-xs font-bold text-gold">
+                          Désactivé
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(product)}
+                          className="text-xs font-semibold text-ink-soft dark:text-gray-300 hover:text-coral border border-line dark:border-dark-line rounded-sm px-3 py-1.5 transition-colors"
+                        >
+                          Modifier
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDelete(product.id, product.nom)
+                          }
+                          className="text-xs font-semibold text-red-500 hover:text-white hover:bg-red-500 border border-red-500/40 rounded-sm px-3 py-1.5 transition-colors"
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-5">
+            <p className="text-xs text-ink-soft dark:text-gray-400">
+              {filteredProducts.length} produit(s) trouvé(s) — page{" "}
+              {page} sur {totalPages}
+            </p>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() =>
+                  setPage((current) => Math.max(1, current - 1))
+                }
+                className="border border-line dark:border-dark-line text-xs font-semibold text-ink dark:text-white px-4 py-2 rounded-sm hover:border-coral hover:text-coral disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                ← Précédent
+              </button>
+
+              <span className="text-xs font-semibold text-ink dark:text-white px-2">
+                {page} / {totalPages}
+              </span>
+
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() =>
+                  setPage((current) =>
+                    Math.min(totalPages, current + 1)
+                  )
+                }
+                className="border border-line dark:border-dark-line text-xs font-semibold text-ink dark:text-white px-4 py-2 rounded-sm hover:border-coral hover:text-coral disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Suivant →
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
