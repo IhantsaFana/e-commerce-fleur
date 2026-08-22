@@ -8,27 +8,22 @@ from app.database import Base
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True
-    )
+    id = Column(Integer, primary_key=True, index=True)
 
-    # Les noms et prénoms ne sont pas uniques :
-    # plusieurs personnes peuvent s'appeler Rakoto Hery.
     lastname = Column(
         String,
+        unique=True,
         index=True,
         nullable=False
     )
 
     firstname = Column(
         String,
+        unique=True,
         index=True,
         nullable=False
     )
 
-    # L'e-mail doit être unique.
     email = Column(
         String,
         unique=True,
@@ -41,18 +36,14 @@ class User(Base):
         nullable=False
     )
 
-    # Votre migration Alembic rend le téléphone unique.
     telephone = Column(
         String(20),
-        unique=True,
-        index=True,
         nullable=True
     )
 
     role = Column(
         String(20),
-        nullable=False,
-        default="Client"
+        nullable=False
     )
 
     created_at = Column(
@@ -65,14 +56,12 @@ class User(Base):
         onupdate=func.now()
     )
 
-    # Un utilisateur possède un panier.
     cart = relationship(
         "Cart",
         back_populates="user",
         uselist=False
     )
 
-    # Un utilisateur peut avoir plusieurs commandes.
     orders = relationship(
         "Order",
         back_populates="user"

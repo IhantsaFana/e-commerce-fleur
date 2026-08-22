@@ -1,68 +1,32 @@
-from sqlalchemy import Column, Integer, String, DateTime
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-
-from app.database import Base
+from pydantic import BaseModel, EmailStr
 
 
-class User(Base):
-    __tablename__ = "users"
+class UserCreate(BaseModel):
+    lastname: str
+    firstname: str
+    email: EmailStr
+    password: str
+    telephone: str
 
-    id = Column(Integer, primary_key=True, index=True)
 
-    lastname = Column(
-        String,
-        unique=True,
-        index=True,
-        nullable=False
-    )
+class UserResponse(BaseModel):
+    id: int
+    lastname: str
+    firstname: str
+    email: EmailStr
+    telephone: str | None = None
+    role: str
 
-    firstname = Column(
-        String,
-        unique=True,
-        index=True,
-        nullable=False
-    )
+    model_config = {
+        "from_attributes": True
+    }
 
-    email = Column(
-        String,
-        unique=True,
-        index=True,
-        nullable=False
-    )
 
-    hashed_password = Column(
-        String,
-        nullable=False
-    )
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
 
-    telephone = Column(
-        String(20),
-        nullable=True
-    )
 
-    role = Column(
-        String(20),
-        nullable=False
-    )
-
-    created_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now()
-    )
-
-    updated_at = Column(
-        DateTime(timezone=True),
-        onupdate=func.now()
-    )
-
-    cart = relationship(
-        "Cart",
-        back_populates="user",
-        uselist=False
-    )
-
-    orders = relationship(
-        "Order",
-        back_populates="user"
-    )
+class Token(BaseModel):
+    access_token: str
+    token_type: str
