@@ -54,18 +54,22 @@ export default function App() {
 
                   <main className="flex-1">
                     <Routes>
+                      {/* Accueil */}
                       <Route path="/" element={<Home />} />
 
+                      {/* Détail d'un produit */}
                       <Route
                         path="/product/:id"
                         element={<ProductDetail />}
                       />
 
+                      {/* Panier */}
                       <Route path="/cart" element={<Cart />} />
 
-                      {/* Connexion unique : Admin ou Client */}
+                      {/* Connexion Admin ou Client */}
                       <Route path="/auth" element={<Auth />} />
 
+                      {/* Paiement : utilisateur connecté obligatoire */}
                       <Route
                         path="/payment"
                         element={
@@ -75,15 +79,7 @@ export default function App() {
                         }
                       />
 
-                      <Route
-                        path="/invoice"
-                        element={
-                          <ProtectedRoute>
-                            <Invoice />
-                          </ProtectedRoute>
-                        }
-                      />
-
+                      {/* Historique des commandes backend */}
                       <Route
                         path="/orders"
                         element={
@@ -93,7 +89,26 @@ export default function App() {
                         }
                       />
 
-                      {/* Admin uniquement */}
+                      {/* Facture réelle : exemple /invoice/5 */}
+                      <Route
+                        path="/invoice/:orderId"
+                        element={
+                          <ProtectedRoute>
+                            <Invoice />
+                          </ProtectedRoute>
+                        }
+                      />
+
+                      {/* Si quelqu'un ouvre /invoice sans ID,
+                          il sera redirigé vers ses commandes. */}
+                      <Route
+                        path="/invoice"
+                        element={
+                          <Navigate to="/orders" replace />
+                        }
+                      />
+
+                      {/* Dashboard Admin : Admin uniquement */}
                       <Route
                         path="/admin"
                         element={
@@ -103,6 +118,7 @@ export default function App() {
                         }
                       />
 
+                      {/* Route inconnue */}
                       <Route
                         path="*"
                         element={<Navigate to="/" replace />}
