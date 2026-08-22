@@ -22,6 +22,7 @@ def generate_invoice(order: Order) -> str:
     width, height = A4
 
     pdf.setFont("Helvetica-Bold", 20)
+
     pdf.drawString(
         50,
         height - 50,
@@ -54,12 +55,49 @@ def generate_invoice(order: Order) -> str:
         f"Date : {order.created_at}"
     )
 
-    y = height - 180
+    pdf.setFont("Helvetica-Bold", 11)
+
+    pdf.drawString(
+        50,
+        height - 185,
+        "Adresse de livraison :"
+    )
+
+    pdf.setFont("Helvetica", 10)
+
+    address = (
+        f"{order.delivery_address or ''}, "
+        f"{order.city or ''}, "
+        f"{order.postal_code or ''}, "
+        f"{order.country or ''}"
+    )
+
+    pdf.drawString(
+        50,
+        height - 202,
+        address[:100]
+    )
+
+    if order.delivery_date:
+        pdf.drawString(
+            50,
+            height - 220,
+            f"Date de livraison : {order.delivery_date}"
+        )
+
+    if order.note:
+        pdf.drawString(
+            50,
+            height - 238,
+            f"Note : {order.note[:90]}"
+        )
+
+    y = height - 275
 
     pdf.setFont("Helvetica-Bold", 11)
 
     pdf.drawString(50, y, "Produit")
-    pdf.drawString(300, y, "Quantité")
+    pdf.drawString(300, y, "Quantite")
     pdf.drawString(380, y, "Prix")
     pdf.drawString(460, y, "Sous-total")
 
@@ -68,11 +106,10 @@ def generate_invoice(order: Order) -> str:
     pdf.setFont("Helvetica", 10)
 
     for item in order.items:
-
         pdf.drawString(
             50,
             y,
-            item.product.name
+            item.product.name[:35]
         )
 
         pdf.drawString(

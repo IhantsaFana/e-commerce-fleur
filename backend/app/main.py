@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
 
-# Importer tous les modèles avant create_all.
 from app.models.user import User
 from app.models.cart import Cart
 from app.models.cart_items import CartItem
@@ -18,7 +17,6 @@ from app.routes.products import router as products_router
 from app.routes.cart import router as cart_router
 from app.routes.orders import router as orders_router
 
-# Crée les tables absentes dans PostgreSQL.
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
