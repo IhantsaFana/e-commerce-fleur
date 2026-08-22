@@ -3,11 +3,14 @@ import os
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from fastapi.responses import FileResponse
-
-from app.dependencies import get_db, get_current_user, require_admin
+from app.dependencies import (
+    get_db,
+    get_current_user,
+    require_admin
+)
 
 from app.models.user import User
 from app.models.cart import Cart
@@ -15,24 +18,40 @@ from app.models.order import Order
 from app.models.payment import Payment
 from app.models.order_item import OrderItem
 
-from app.schemas.order import OrderResponse, OrderListResponse, OrderDetailResponse, OrderStatusUpdate
+from app.schemas.order import (
+    OrderCreate,
+    OrderResponse,
+    OrderListResponse,
+    OrderDetailResponse,
+    OrderStatusUpdate
+)
 
-from app.schemas.payment import PaymentCreate, PaymentResult
+from app.schemas.payment import (
+    PaymentCreate,
+    PaymentResult
+)
 
 from app.services.invoice import generate_invoice
+
 
 router = APIRouter(
     prefix="/orders",
     tags=["Orders"]
 )
 
-# Creation de commande
-@router.post("",response_model=OrderResponse, status_code=201)
+
+# Création de commande depuis le panier.
+@router.post(
+    "",
+    response_model=OrderResponse,
+    status_code=201
+)
 def create_order(
+        order_data: OrderCreate,
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
     ):
-    # 1. Récupérer le panier
+    # Récupérer le panier de l'utilisateur connecté.
     cart = db.query(Cart).filter(
         Cart.user_id == current_user.id
     ).first()
@@ -43,18 +62,20 @@ def create_order(
             detail="Le panier est vide"
         )
 
-    # 2. Vérifier le stock et calculer le total
+    # Vérifier les stocks et calculer le prix total.
     total = Decimal("0")
     order_items_data = []
 
     for cart_item in cart.items:
-
         product = cart_item.product
 
         if not product or not product.is_active:
             raise HTTPException(
                 status_code=400,
-                detail=f"Le produit {cart_item.product_id} n'est plus disponible"
+                detail=(
+                    f"Le produit {cart_item.product_id} "
+                    "n'est plus disponible"
+                )
             )
 
         if cart_item.quantity > product.stock:
@@ -76,19 +97,31 @@ def create_order(
             "product": product
         })
 
-    # 3. Créer la commande
+    # Créer la commande avec les données de livraison.
     order = Order(
         user_id=current_user.id,
         status="pending",
-        total=total
+        total=total,
+
+        delivery_address=order_data.delivery_address.strip(),
+        city=order_data.city.strip(),
+        postal_code=order_data.postal_code.strip(),
+        country=order_data.country.strip(),
+
+        delivery_date=order_data.delivery_date,
+
+        note=(
+            order_data.note.strip()
+            if order_data.note
+            else None
+        )
     )
 
     db.add(order)
     db.flush()
 
-    # 4. Créer les lignes de commande
+    # Créer les lignes de commande et diminuer le stock.
     for item_data in order_items_data:
-
         order_item = OrderItem(
             order_id=order.id,
             product_id=item_data["product_id"],
@@ -99,22 +132,24 @@ def create_order(
 
         db.add(order_item)
 
-        # 5. Diminuer le stock
+        # Diminution définitive du stock.
         item_data["product"].stock -= item_data["quantity"]
 
-    # 6. Vider le panier
+    # Vider le panier.
     for cart_item in cart.items:
         db.delete(cart_item)
 
-    # 7. Valider la transaction
     db.commit()
-
     db.refresh(order)
 
     return order
 
-# Lister tous les commandes
-@router.get("",response_model=list[OrderListResponse])
+
+# Liste des commandes appartenant à l'utilisateur connecté.
+@router.get(
+    "",
+    response_model=list[OrderListResponse]
+)
 def get_orders(
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
@@ -128,8 +163,12 @@ def get_orders(
 
     return orders
 
-# Lister une commande specifique
-@router.get("/{order_id}",response_model=OrderDetailResponse)
+
+# Détail d'une commande utilisateur.
+@router.get(
+    "/{order_id}",
+    response_model=OrderDetailResponse
+)
 def get_order(
         order_id: int,
         db: Session = Depends(get_db),
@@ -148,8 +187,12 @@ def get_order(
 
     return order
 
-# Changer le status du commande(envoyer ou livrer) accessible admin seulement apres payement
-@router.put("/{order_id}/status", response_model=OrderDetailResponse)
+
+# Modifier le statut : Admin uniquement.
+@router.put(
+    "/{order_id}/status",
+    response_model=OrderDetailResponse
+)
 def update_order_status(
         order_id: int,
         status_data: OrderStatusUpdate,
@@ -177,20 +220,31 @@ def update_order_status(
             detail="Statut de commande invalide"
         )
 
-    # Vérifier la transition
-    if status_data.status == "shipped":
-        if order.status != "confirmed":
-            raise HTTPException(
-                status_code=400,
-                detail="La commande doit être confirmée avant expédition"
+    # Une commande doit être confirmée avant expédition.
+    if (
+        status_data.status == "shipped"
+        and order.status != "confirmed"
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "La commande doit être confirmée "
+                "avant expédition"
             )
+        )
 
-    if status_data.status == "delivered":
-        if order.status != "shipped":
-            raise HTTPException(
-                status_code=400,
-                detail="La commande doit être expédiée avant livraison"
+    # Une commande doit être expédiée avant livraison.
+    if (
+        status_data.status == "delivered"
+        and order.status != "shipped"
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "La commande doit être expédiée "
+                "avant livraison"
             )
+        )
 
     order.status = status_data.status
 
@@ -199,15 +253,18 @@ def update_order_status(
 
     return order
 
-# Payment avec generation de facture
-@router.post("/{order_id}/pay", response_model=PaymentResult)
+
+# Paiement d'une commande et génération de facture.
+@router.post(
+    "/{order_id}/pay",
+    response_model=PaymentResult
+)
 def pay_order(
         order_id: int,
         payment_data: PaymentCreate,
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
     ):
-    # 1. Vérifier que la commande appartient à l'utilisateur
     order = db.query(Order).filter(
         Order.id == order_id,
         Order.user_id == current_user.id
@@ -219,14 +276,12 @@ def pay_order(
             detail="Commande introuvable"
         )
 
-    # 2. Vérifier que la commande peut être payée
     if order.status != "pending":
         raise HTTPException(
             status_code=400,
             detail="Cette commande ne peut pas être payée"
         )
 
-    # 3. Vérifier qu'il n'existe pas déjà un paiement
     existing_payment = db.query(Payment).filter(
         Payment.order_id == order.id
     ).first()
@@ -237,7 +292,6 @@ def pay_order(
             detail="Cette commande est déjà payée"
         )
 
-    # 4. Créer le paiement
     payment = Payment(
         order_id=order.id,
         amount=order.total,
@@ -247,32 +301,32 @@ def pay_order(
 
     db.add(payment)
 
-    # 5. Confirmer la commande
+    # Paiement terminé : commande confirmée.
     order.status = "confirmed"
 
-    # 6. Valider la transaction
     db.commit()
-
-    # 7. Actualiser le paiement
     db.refresh(payment)
+    db.refresh(order)
 
-    # 8. Générer la facture
+    # Générer le fichier PDF facture.
     invoice_path = generate_invoice(order)
 
-    # 9. Retourner le paiement et la facture
     return {
         "payment": payment,
         "invoice": invoice_path
     }
 
-# Annulation d'une commande
-@router.post("/{order_id}/cancel", response_model=OrderDetailResponse)
+
+# Annuler une commande seulement avant paiement.
+@router.post(
+    "/{order_id}/cancel",
+    response_model=OrderDetailResponse
+)
 def cancel_order(
         order_id: int,
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
     ):
-    # Vérifier que la commande appartient au client
     order = db.query(Order).filter(
         Order.id == order_id,
         Order.user_id == current_user.id
@@ -284,14 +338,14 @@ def cancel_order(
             detail="Commande introuvable"
         )
 
-    # Une commande déjà payée ne peut pas être annulée
     if order.status != "pending":
         raise HTTPException(
             status_code=400,
-            detail="Cette commande ne peut plus être annulée"
+            detail=(
+                "Cette commande ne peut plus être annulée"
+            )
         )
 
-    # Annulation
     order.status = "cancelled"
 
     db.commit()
@@ -299,8 +353,11 @@ def cancel_order(
 
     return order
 
-# Affichage du facture (telechargement)
-@router.get("/{order_id}/invoice")
+
+# Télécharger la facture PDF.
+@router.get(
+    "/{order_id}/invoice"
+)
 def get_invoice(
         order_id: int,
         db: Session = Depends(get_db),
