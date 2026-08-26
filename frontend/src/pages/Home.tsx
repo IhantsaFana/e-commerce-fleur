@@ -1,8 +1,14 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import { useLanguage } from "../context/LanguageContext";
-import { Fleur } from "@/data/products";
-import { getFleurs, getCategories } from "@/services/productStore";
-import ProductCard from "@/components/ProductCard";
+import { Fleur } from "../data/products";
+import { getCategories } from "../services/productStore";
+import { fetchProducts } from "../services/productApi";
+import ProductCard from "../components/ProductCard";
 
 const SLIDE_IMAGES = [
   "https://images.pexels.com/photos/5894049/pexels-photo-5894049.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=800&w=1600",
@@ -17,52 +23,127 @@ const STEP_ICONS = ["🛒", "👤", "💳", "🧾"];
 
 export default function Home() {
   const { t } = useLanguage();
-  const [fleurs, setFleurs] = useState<Fleur[]>(() => getFleurs());
-  const [categories, setCategories] = useState(() => getCategories());
+
+  // Produits venant du backend FastAPI / PostgreSQL.
+  const [fleurs, setFleurs] = useState<Fleur[]>([]);
+
+  // Les catégories sont encore locales car votre backend
+  // ne possède pas encore de table categories.
+  const [categories] = useState(() => getCategories());
+
   const [activeFilter, setActiveFilter] = useState<number | null>(null);
   const [current, setCurrent] = useState(0);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [productError, setProductError] = useState("");
 
-  // Recharge à chaque montage (après retour depuis l'admin)
-  useEffect(() => {
-    setFleurs(getFleurs());
-    setCategories(getCategories());
+  const loadProducts = useCallback(async () => {
+    try {
+      setLoadingProducts(true);
+      setProductError("");
+
+      const data = await fetchProducts();
+
+      setFleurs(data);
+    } catch (error) {
+      setProductError(
+        error instanceof Error
+          ? error.message
+          : "Impossible de charger les produits"
+      );
+    } finally {
+      setLoadingProducts(false);
+    }
   }, []);
+
+  useEffect(() => {
+    // Chargement initial depuis PostgreSQL.
+    loadProducts();
+
+    // Mise à jour immédiate après ajout / modification / suppression Admin.
+    const handleProductsUpdated = () => {
+      loadProducts();
+    };
+
+    // Mise à jour si Home est ouverte dans un autre onglet.
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "fq_products_updated_at") {
+        loadProducts();
+      }
+    };
+
+    window.addEventListener(
+      "products-updated",
+      handleProductsUpdated
+    );
+
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(
+        "products-updated",
+        handleProductsUpdated
+      );
+
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [loadProducts]);
 
   const slides = t.hero.slides;
 
-  const catMap = useMemo(() => new Map(categories.map((c) => [c.id, c.nom])), [categories]);
+  const catMap = useMemo(() => {
+    return new Map(
+      categories.map((category) => [
+        category.id,
+        category.nom,
+      ])
+    );
+  }, [categories]);
 
   const filtered = useMemo(() => {
-    if (!activeFilter) return fleurs;
-    return fleurs.filter((f) => f.categorieId === activeFilter);
+    if (activeFilter === null) {
+      return fleurs;
+    }
+
+    return fleurs.filter(
+      (fleur) => fleur.categorieId === activeFilter
+    );
   }, [fleurs, activeFilter]);
 
   const goTo = useCallback(
-    (i: number) => setCurrent((i + slides.length) % slides.length),
+    (index: number) => {
+      setCurrent((index + slides.length) % slides.length);
+    },
     [slides.length]
   );
-  const next = useCallback(() => goTo(current + 1), [current, goTo]);
-  const prev = useCallback(() => goTo(current - 1), [current, goTo]);
+
+  const next = useCallback(() => {
+    goTo(current + 1);
+  }, [current, goTo]);
+
+  const prev = useCallback(() => {
+    goTo(current - 1);
+  }, [current, goTo]);
 
   useEffect(() => {
-    const id = setTimeout(() => {
-      setCurrent((c) => (c + 1) % slides.length);
+    const timer = setTimeout(() => {
+      setCurrent((index) => (index + 1) % slides.length);
     }, AUTOPLAY_MS);
-    return () => clearTimeout(id);
+
+    return () => clearTimeout(timer);
   }, [current, slides.length]);
 
   return (
     <div className="animate-fade-up">
-      {/* ===== HERO — CARROUSEL ===== */}
+      {/* ===== HERO / CARROUSEL ===== */}
       <section className="relative h-[520px] overflow-hidden">
-        {slides.map((_, i) => (
+        {slides.map((_, index) => (
           <div
-            key={i}
+            key={index}
             className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
-              i === current ? "opacity-100" : "opacity-0"
+              index === current ? "opacity-100" : "opacity-0"
             }`}
             style={{
-              backgroundImage: `url(${SLIDE_IMAGES[i]})`,
+              backgroundImage: `url(${SLIDE_IMAGES[index]})`,
               backgroundSize: "cover",
               backgroundPosition: "center",
             }}
@@ -76,9 +157,11 @@ export default function Home() {
             <h1 className="font-display text-4xl md:text-5xl text-ink dark:text-white max-w-md leading-tight">
               {slides[current].title}
             </h1>
+
             <p className="font-display text-2xl md:text-3xl font-bold text-ink dark:text-white mt-2">
               {slides[current].text}
             </p>
+
             <a
               href="#products"
               className="mt-6 inline-block w-fit bg-sage hover:bg-sage-dark text-white text-sm font-semibold tracking-wide px-8 py-3 rounded-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
@@ -93,8 +176,19 @@ export default function Home() {
           aria-label="Précédent"
           className="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center bg-white/70 dark:bg-dark-surface/70 text-ink dark:text-white backdrop-blur border border-line dark:border-dark-line hover:bg-coral hover:text-white hover:border-coral transition-all duration-200"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path
+              d="M15 18l-6-6 6-6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         </button>
 
@@ -103,33 +197,54 @@ export default function Home() {
           aria-label="Suivant"
           className="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center bg-white/70 dark:bg-dark-surface/70 text-ink dark:text-white backdrop-blur border border-line dark:border-dark-line hover:bg-coral hover:text-white hover:border-coral transition-all duration-200"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path
+              d="M9 6l6 6-6 6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         </button>
 
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2">
-          {slides.map((_, i) => (
+          {slides.map((_, index) => (
             <button
-              key={i}
-              onClick={() => setCurrent(i)}
-              aria-label={`Slide ${i + 1}`}
+              key={index}
+              onClick={() => setCurrent(index)}
+              aria-label={`Slide ${index + 1}`}
               className={`h-2 rounded-full transition-all duration-300 ${
-                i === current ? "w-8 bg-coral" : "w-2 bg-white/60 dark:bg-gray-400 hover:bg-coral"
+                index === current
+                  ? "w-8 bg-coral"
+                  : "w-2 bg-white/60 dark:bg-gray-400 hover:bg-coral"
               }`}
             />
           ))}
         </div>
       </section>
 
-      {/* ===== PRODUITS ===== */}
-      <section id="products" className="max-w-[1400px] mx-auto px-6 py-14">
+      {/* ===== PRODUITS BACKEND ===== */}
+      <section
+        id="products"
+        className="max-w-[1400px] mx-auto px-6 py-14"
+      >
         <div className="text-center mb-8">
-          <h2 className="font-display text-3xl text-ink dark:text-white mb-2">{t.home.productsTitle}</h2>
-          <p className="text-sm text-ink-soft dark:text-gray-400">{t.home.productsSubtitle}</p>
+          <h2 className="font-display text-3xl text-ink dark:text-white mb-2">
+            {t.home.productsTitle}
+          </h2>
+
+          <p className="text-sm text-ink-soft dark:text-gray-400">
+            {t.home.productsSubtitle}
+          </p>
         </div>
 
-        {/* Filtres par catégorie */}
+        {/* Filtres frontend - les catégories sont encore locales */}
         <div className="flex gap-2 overflow-x-auto pb-4 mb-6 -mx-1 px-1 justify-start md:justify-center">
           <button
             onClick={() => setActiveFilter(null)}
@@ -141,38 +256,71 @@ export default function Home() {
           >
             {t.home.all}
           </button>
-          {categories.map((c) => (
+
+          {categories.map((category) => (
             <button
-              key={c.id}
-              onClick={() => setActiveFilter(c.id)}
+              key={category.id}
+              onClick={() => setActiveFilter(category.id)}
               className={`whitespace-nowrap text-xs font-semibold px-4 py-2 rounded-full border transition-colors duration-200 ${
-                activeFilter === c.id
+                activeFilter === category.id
                   ? "border-coral text-coral bg-coral/5"
                   : "border-line dark:border-dark-line text-ink-soft dark:text-gray-300 hover:border-coral hover:text-coral"
               }`}
             >
-              {c.nom}
+              {category.nom}
             </button>
           ))}
         </div>
 
-        {/* Grille produits */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {filtered.map((fleur) => (
-            <ProductCard
-              key={fleur.id}
-              fleur={fleur}
-              categorieNom={catMap.get(fleur.categorieId) ?? ""}
-            />
-          ))}
-        </div>
+        {loadingProducts && (
+          <div className="py-16 text-center text-sm text-ink-soft dark:text-gray-400">
+            Chargement des produits depuis PostgreSQL...
+          </div>
+        )}
+
+        {!loadingProducts && productError && (
+          <div className="py-10 text-center text-sm text-red-500">
+            {productError}
+          </div>
+        )}
+
+        {!loadingProducts &&
+          !productError &&
+          fleurs.length === 0 && (
+            <div className="py-16 text-center">
+              <div className="text-5xl mb-4">🌷</div>
+
+              <p className="text-sm text-ink-soft dark:text-gray-400">
+                Aucun produit disponible.
+              </p>
+            </div>
+          )}
+
+        {!loadingProducts &&
+          !productError &&
+          fleurs.length > 0 && (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {filtered.map((fleur) => (
+                <ProductCard
+                  key={fleur.id}
+                  fleur={fleur}
+                  categorieNom={
+                    catMap.get(fleur.categorieId) || "Fleurs"
+                  }
+                />
+              ))}
+            </div>
+          )}
       </section>
 
       {/* ===== COMMENT ÇA MARCHE ===== */}
       <section className="bg-graybg/60 dark:bg-dark-surface/40 border-y border-line dark:border-dark-line">
         <div className="max-w-[1400px] mx-auto px-6 py-16">
           <div className="text-center mb-12">
-            <h2 className="font-display text-3xl text-ink dark:text-white mb-2">{t.home.howTitle}</h2>
+            <h2 className="font-display text-3xl text-ink dark:text-white mb-2">
+              {t.home.howTitle}
+            </h2>
+
             <p className="text-sm text-ink-soft dark:text-gray-400 max-w-xl mx-auto">
               {t.home.howSubtitle}
             </p>
@@ -181,16 +329,28 @@ export default function Home() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-10 relative">
             <div className="hidden lg:block absolute top-10 left-[12%] right-[12%] h-px bg-line dark:bg-dark-line" />
 
-            {t.home.howSteps.map((s, i) => (
-              <div key={i} className="relative text-center group">
+            {t.home.howSteps.map((step, index) => (
+              <div
+                key={index}
+                className="relative text-center group"
+              >
                 <div className="relative w-20 h-20 mx-auto mb-5 rounded-full bg-white dark:bg-dark-bg border-2 border-coral flex items-center justify-center shadow-md transition-all duration-300 group-hover:scale-110 group-hover:shadow-xl">
-                  <span className="text-3xl">{STEP_ICONS[i]}</span>
+                  <span className="text-3xl">
+                    {STEP_ICONS[index]}
+                  </span>
+
                   <span className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-coral text-white text-xs font-bold flex items-center justify-center shadow">
-                    {i + 1}
+                    {index + 1}
                   </span>
                 </div>
-                <h3 className="font-semibold text-ink dark:text-white mb-1">{s.title}</h3>
-                <p className="text-xs text-ink-soft dark:text-gray-400 leading-relaxed">{s.text}</p>
+
+                <h3 className="font-semibold text-ink dark:text-white mb-1">
+                  {step.title}
+                </h3>
+
+                <p className="text-xs text-ink-soft dark:text-gray-400 leading-relaxed">
+                  {step.text}
+                </p>
               </div>
             ))}
           </div>

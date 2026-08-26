@@ -1,13 +1,22 @@
 import { useEffect } from "react";
-import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import {
+  HashRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
+
 import { ThemeProvider } from "./context/ThemeContext";
 import { LanguageProvider } from "./context/LanguageContext";
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider } from "./context/CartContext";
 import { ToastProvider } from "./context/ToastContext";
+
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
+
 import Home from "./pages/Home";
 import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
@@ -19,9 +28,14 @@ import Admin from "./pages/Admin";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
+
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+    window.scrollTo({
+      top: 0,
+      behavior: "instant" as ScrollBehavior,
+    });
   }, [pathname]);
+
   return null;
 }
 
@@ -34,14 +48,28 @@ export default function App() {
             <ToastProvider>
               <HashRouter>
                 <ScrollToTop />
+
                 <div className="min-h-screen flex flex-col">
                   <Header />
+
                   <main className="flex-1">
                     <Routes>
+                      {/* Accueil */}
                       <Route path="/" element={<Home />} />
-                      <Route path="/product/:id" element={<ProductDetail />} />
+
+                      {/* Détail d'un produit */}
+                      <Route
+                        path="/product/:id"
+                        element={<ProductDetail />}
+                      />
+
+                      {/* Panier */}
                       <Route path="/cart" element={<Cart />} />
+
+                      {/* Connexion Admin ou Client */}
                       <Route path="/auth" element={<Auth />} />
+
+                      {/* Paiement : utilisateur connecté obligatoire */}
                       <Route
                         path="/payment"
                         element={
@@ -50,14 +78,8 @@ export default function App() {
                           </ProtectedRoute>
                         }
                       />
-                      <Route
-                        path="/invoice"
-                        element={
-                          <ProtectedRoute>
-                            <Invoice />
-                          </ProtectedRoute>
-                        }
-                      />
+
+                      {/* Historique des commandes backend */}
                       <Route
                         path="/orders"
                         element={
@@ -66,17 +88,44 @@ export default function App() {
                           </ProtectedRoute>
                         }
                       />
+
+                      {/* Facture réelle : exemple /invoice/5 */}
+                      <Route
+                        path="/invoice/:orderId"
+                        element={
+                          <ProtectedRoute>
+                            <Invoice />
+                          </ProtectedRoute>
+                        }
+                      />
+
+                      {/* Si quelqu'un ouvre /invoice sans ID,
+                          il sera redirigé vers ses commandes. */}
+                      <Route
+                        path="/invoice"
+                        element={
+                          <Navigate to="/orders" replace />
+                        }
+                      />
+
+                      {/* Dashboard Admin : Admin uniquement */}
                       <Route
                         path="/admin"
                         element={
-                          <ProtectedRoute>
+                          <ProtectedRoute adminOnly>
                             <Admin />
                           </ProtectedRoute>
                         }
                       />
-                      <Route path="*" element={<Navigate to="/" replace />} />
+
+                      {/* Route inconnue */}
+                      <Route
+                        path="*"
+                        element={<Navigate to="/" replace />}
+                      />
                     </Routes>
                   </main>
+
                   <Footer />
                 </div>
               </HashRouter>

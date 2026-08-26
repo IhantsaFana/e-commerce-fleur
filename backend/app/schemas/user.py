@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 
+
 class UserCreate(BaseModel):
     lastname: str
     firstname: str
@@ -7,21 +8,24 @@ class UserCreate(BaseModel):
     password: str
     telephone: str
 
+
 class UserResponse(BaseModel):
     id: int
     lastname: str
     firstname: str
     email: EmailStr
-    telephone: str
-    role:str
+    telephone: str | None = None
+    role: str
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
 
 class Token(BaseModel):
     access_token: str
